@@ -178,40 +178,59 @@ def team_leader_view():
     
     # --- Tab 1: Create Task Form ---
     with tab1:
-        with st.form("create_task_form"):
+        # Clear Form Button Logic
+        if st.button("Clear Form", key="clear_form_btn"):
+            # Reset all session state keys for the form
+            keys_to_reset = [
+                "task_name", "activity_type", "ref_part", "status", 
+                "start_date", "date_receipt", "date_clarity", "comm_date", 
+                "cust_manager", "qual_ref", "ftr_cust", "ftr_int", 
+                "ftr_gate", "desc", "remarks"
+            ]
+            for key in keys_to_reset:
+                if key in st.session_state:
+                    del st.session_state[key]
+            # Reset pilots separately if needed, though selectbox handles it on rerun if key is deleted
+            if "name_pilot" in st.session_state:
+                del st.session_state["name_pilot"]
+            st.rerun()
+
+        with st.form("create_task_form", clear_on_submit=True):
             st.subheader("New Activity Assignment")
             col1, col2, col3 = st.columns(3)
             
+            # Prepare Pilot List
+            pilots = [u['name'] for k,u in USERS.items() if u['role'] == "Team Member"]
+
             with col1:
-                task_name = st.text_input("Task Name")
-                # Dropdown for pilots (simulating pulling from user DB)
-                pilots = [u['name'] for k,u in USERS.items() if u['role'] == "Team Member"]
-                name_pilot = st.selectbox("NAME_ACTIVITY_PILOT", pilots)
-                activity_type = st.selectbox("ACTIVITY_TYPE", ["3d development", "2d drawing", "Release"])
-                ref_part = st.text_input("REFERENCE_PART_NUMBER")
+                task_name = st.text_input("Task Name", key="task_name")
+                name_pilot = st.selectbox("NAME_ACTIVITY_PILOT", pilots, key="name_pilot")
+                activity_type = st.selectbox("ACTIVITY_TYPE", ["3d development", "2d drawing", "Release"], key="activity_type")
+                ref_part = st.text_input("REFERENCE_PART_NUMBER", key="ref_part")
                 
             with col2:
-                status = st.selectbox("STATUS", ["Hold", "Inprogress", "Completed", "Cancelled"])
-                start_date = st.date_input("START_DATE", value=date.today())
-                date_receipt = st.date_input("DATE_OF_RECEIPT", value=date.today())
-                date_clarity = st.date_input("DATE_OF_CLARITY_IN_INPUT", value=date.today())
+                status = st.selectbox("STATUS", ["Hold", "Inprogress", "Completed", "Cancelled"], key="status")
+                start_date = st.date_input("START_DATE", value=date.today(), key="start_date")
+                date_receipt = st.date_input("DATE_OF_RECEIPT", value=date.today(), key="date_receipt")
+                date_clarity = st.date_input("DATE_OF_CLARITY_IN_INPUT", value=date.today(), key="date_clarity")
                 
             with col3:
-                comm_date = st.date_input("COMMITMENT_DATE_TO_CUSTOMER", value=date.today())
-                project_lead = st.text_input("PROJECT_LEAD", value=st.session_state['name'])
-                cust_manager = st.text_input("CUSTOMER_MANAGER_NAME")
-                qual_ref = st.text_input("NAME_QUALITY_GATE_REFERENT")
+                comm_date = st.date_input("COMMITMENT_DATE_TO_CUSTOMER", value=date.today(), key="comm_date")
+                # Keep Project Lead auto-filled as it's the current user
+                project_lead = st.text_input("PROJECT_LEAD", value=st.session_state['name'], key="project_lead")
+                cust_manager = st.text_input("CUSTOMER_MANAGER_NAME", key="cust_manager")
+                qual_ref = st.text_input("NAME_QUALITY_GATE_REFERENT", key="qual_ref")
 
             st.markdown("---")
             col4, col5 = st.columns(2)
             with col4:
-                ftr_cust = st.selectbox("FTR_CUSTOMER", ["Yes", "NO"])
-                ftr_int = st.selectbox("FTR_INTERNAL", ["Yes", "NO"])
+                ftr_cust = st.selectbox("FTR_CUSTOMER", ["Yes", "NO"], key="ftr_cust")
+                ftr_int = st.selectbox("FTR_INTERNAL", ["Yes", "NO"], key="ftr_int")
             with col5:
-                ftr_gate = st.selectbox("FTR_QUALITY_GATE_INTERNAL", ["Yes", "NO"])
+                ftr_gate = st.selectbox("FTR_QUALITY_GATE_INTERNAL", ["Yes", "NO"], key="ftr_gate")
             
-            desc = st.text_area("DESCRIPTION_OF_ACTIVITY")
-            remarks = st.text_area("CUSTOMER_REMARKS")
+            desc = st.text_area("DESCRIPTION_OF_ACTIVITY", key="desc")
+            remarks = st.text_area("CUSTOMER_REMARKS", key="remarks")
             
             submitted = st.form_submit_button("Assign Task")
             
