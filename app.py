@@ -178,22 +178,28 @@ def team_leader_view():
     
     # --- Tab 1: Create Task Form ---
     with tab1:
-        # Clear Form Button Logic
-        if st.button("Clear Form", key="clear_form_btn"):
-            # Reset all session state keys for the form
-            keys_to_reset = [
-                "task_name", "activity_type", "ref_part", "status", 
-                "start_date", "date_receipt", "date_clarity", "comm_date", 
-                "cust_manager", "qual_ref", "ftr_cust", "ftr_int", 
-                "ftr_gate", "desc", "remarks"
-            ]
-            for key in keys_to_reset:
-                if key in st.session_state:
-                    del st.session_state[key]
-            # Reset pilots separately if needed, though selectbox handles it on rerun if key is deleted
-            if "name_pilot" in st.session_state:
-                del st.session_state["name_pilot"]
-            st.rerun()
+        # Clear Form Logic
+        # We use a callback to reset session state variables
+        def clear_form_callback():
+            st.session_state["form_task_name"] = ""
+            st.session_state["form_name_pilot"] = None
+            st.session_state["form_activity_type"] = None
+            st.session_state["form_ref_part"] = ""
+            st.session_state["form_status"] = None
+            st.session_state["form_start_date"] = None
+            st.session_state["form_date_receipt"] = None
+            st.session_state["form_date_clarity"] = None
+            st.session_state["form_comm_date"] = None
+            st.session_state["form_project_lead"] = st.session_state['name']
+            st.session_state["form_cust_manager"] = ""
+            st.session_state["form_qual_ref"] = ""
+            st.session_state["form_ftr_cust"] = None
+            st.session_state["form_ftr_int"] = None
+            st.session_state["form_ftr_gate"] = None
+            st.session_state["form_desc"] = ""
+            st.session_state["form_remarks"] = ""
+
+        st.button("Clear Form", on_click=clear_form_callback)
 
         with st.form("create_task_form", clear_on_submit=True):
             st.subheader("New Activity Assignment")
@@ -203,61 +209,67 @@ def team_leader_view():
             pilots = [u['name'] for k,u in USERS.items() if u['role'] == "Team Member"]
 
             with col1:
-                task_name = st.text_input("Task Name", key="task_name")
-                name_pilot = st.selectbox("NAME_ACTIVITY_PILOT", pilots, key="name_pilot")
-                activity_type = st.selectbox("ACTIVITY_TYPE", ["3d development", "2d drawing", "Release"], key="activity_type")
-                ref_part = st.text_input("REFERENCE_PART_NUMBER", key="ref_part")
+                # Use key=... and set value to session_state keys if they exist, or None for empty
+                # Streamlit widgets like selectbox need index=None for empty state
+                
+                task_name = st.text_input("Task Name", key="form_task_name")
+                name_pilot = st.selectbox("NAME_ACTIVITY_PILOT", pilots, index=None, placeholder="Select Pilot...", key="form_name_pilot")
+                activity_type = st.selectbox("ACTIVITY_TYPE", ["3d development", "2d drawing", "Release"], index=None, placeholder="Select Type...", key="form_activity_type")
+                ref_part = st.text_input("REFERENCE_PART_NUMBER", key="form_ref_part")
                 
             with col2:
-                status = st.selectbox("STATUS", ["Hold", "Inprogress", "Completed", "Cancelled"], key="status")
-                start_date = st.date_input("START_DATE", value=date.today(), key="start_date")
-                date_receipt = st.date_input("DATE_OF_RECEIPT", value=date.today(), key="date_receipt")
-                date_clarity = st.date_input("DATE_OF_CLARITY_IN_INPUT", value=date.today(), key="date_clarity")
+                status = st.selectbox("STATUS", ["Hold", "Inprogress", "Completed", "Cancelled"], index=None, placeholder="Select Status...", key="form_status")
+                start_date = st.date_input("START_DATE", value=None, key="form_start_date")
+                date_receipt = st.date_input("DATE_OF_RECEIPT", value=None, key="form_date_receipt")
+                date_clarity = st.date_input("DATE_OF_CLARITY_IN_INPUT", value=None, key="form_date_clarity")
                 
             with col3:
-                comm_date = st.date_input("COMMITMENT_DATE_TO_CUSTOMER", value=date.today(), key="comm_date")
-                # Keep Project Lead auto-filled as it's the current user
-                project_lead = st.text_input("PROJECT_LEAD", value=st.session_state['name'], key="project_lead")
-                cust_manager = st.text_input("CUSTOMER_MANAGER_NAME", key="cust_manager")
-                qual_ref = st.text_input("NAME_QUALITY_GATE_REFERENT", key="qual_ref")
+                comm_date = st.date_input("COMMITMENT_DATE_TO_CUSTOMER", value=None, key="form_comm_date")
+                project_lead = st.text_input("PROJECT_LEAD", value=st.session_state['name'], key="form_project_lead")
+                cust_manager = st.text_input("CUSTOMER_MANAGER_NAME", key="form_cust_manager")
+                qual_ref = st.text_input("NAME_QUALITY_GATE_REFERENT", key="form_qual_ref")
 
             st.markdown("---")
             col4, col5 = st.columns(2)
             with col4:
-                ftr_cust = st.selectbox("FTR_CUSTOMER", ["Yes", "NO"], key="ftr_cust")
-                ftr_int = st.selectbox("FTR_INTERNAL", ["Yes", "NO"], key="ftr_int")
+                ftr_cust = st.selectbox("FTR_CUSTOMER", ["Yes", "NO"], index=None, placeholder="Select...", key="form_ftr_cust")
+                ftr_int = st.selectbox("FTR_INTERNAL", ["Yes", "NO"], index=None, placeholder="Select...", key="form_ftr_int")
             with col5:
-                ftr_gate = st.selectbox("FTR_QUALITY_GATE_INTERNAL", ["Yes", "NO"], key="ftr_gate")
+                ftr_gate = st.selectbox("FTR_QUALITY_GATE_INTERNAL", ["Yes", "NO"], index=None, placeholder="Select...", key="form_ftr_gate")
             
-            desc = st.text_area("DESCRIPTION_OF_ACTIVITY", key="desc")
-            remarks = st.text_area("CUSTOMER_REMARKS", key="remarks")
+            desc = st.text_area("DESCRIPTION_OF_ACTIVITY", key="form_desc")
+            remarks = st.text_area("CUSTOMER_REMARKS", key="form_remarks")
             
             submitted = st.form_submit_button("Assign Task")
             
             if submitted:
-                new_task = {
-                    "name_activity_pilot": name_pilot,
-                    "task_name": task_name,
-                    "date_of_receipt": date_receipt,
-                    "actual_delivery_date": None, # Initially None
-                    "commitment_date_to_customer": comm_date,
-                    "status": status,
-                    "ftr_customer": ftr_cust,
-                    "reference_part_number": ref_part,
-                    "ftr_internal": ftr_int,
-                    "description_of_activity": desc,
-                    "activity_type": activity_type,
-                    "ftr_quality_gate_internal": ftr_gate,
-                    "date_of_clarity_in_input": date_clarity,
-                    "start_date": start_date,
-                    "customer_remarks": remarks,
-                    "name_quality_gate_referent": qual_ref,
-                    "project_lead": project_lead,
-                    "customer_manager_name": cust_manager
-                }
-                add_task(new_task)
-                st.success("Task created successfully!")
-                st.rerun()
+                # Validation: check if essential fields are filled
+                if not task_name or not name_pilot or not comm_date:
+                    st.error("Please fill in at least Task Name, Pilot, and Commitment Date.")
+                else:
+                    new_task = {
+                        "name_activity_pilot": name_pilot,
+                        "task_name": task_name,
+                        "date_of_receipt": date_receipt,
+                        "actual_delivery_date": None, # Initially None
+                        "commitment_date_to_customer": comm_date,
+                        "status": status if status else "Hold", # Default if empty
+                        "ftr_customer": ftr_cust,
+                        "reference_part_number": ref_part,
+                        "ftr_internal": ftr_int,
+                        "description_of_activity": desc,
+                        "activity_type": activity_type,
+                        "ftr_quality_gate_internal": ftr_gate,
+                        "date_of_clarity_in_input": date_clarity,
+                        "start_date": start_date,
+                        "customer_remarks": remarks,
+                        "name_quality_gate_referent": qual_ref,
+                        "project_lead": project_lead,
+                        "customer_manager_name": cust_manager
+                    }
+                    add_task(new_task)
+                    st.success("Task created successfully!")
+                    st.rerun()
 
     # --- Tab 2: Data Table ---
     with tab2:
@@ -268,23 +280,84 @@ def team_leader_view():
     with tab3:
         df = get_all_tasks()
         if not df.empty:
+            st.subheader("Monthly Performance Trends")
+            
+            # --- Preprocessing for Graphs ---
+            # Ensure dates are datetime objects
+            df['actual_delivery_date'] = pd.to_datetime(df['actual_delivery_date'], errors='coerce')
+            df['month_year'] = df['actual_delivery_date'].dt.strftime('%Y-%m')
+            
+            # Filter only completed tasks for meaningful OTD stats, or all tasks with dates
+            metrics_df = df.dropna(subset=['actual_delivery_date'])
+            
+            if not metrics_df.empty:
+                # 1. OTD Analysis Grouped by Month
+                monthly_groups = metrics_df.groupby('month_year')
+                
+                otd_stats = []
+                ftr_stats = []
+                
+                for month, group in monthly_groups:
+                    # OTD Calc
+                    total_in_month = len(group)
+                    otd_yes = len(group[group['otd_internal'] == 'Yes'])
+                    otd_percentage = (otd_yes / total_in_month) * 100 if total_in_month > 0 else 0
+                    otd_stats.append({'Month': month, 'OTD %': otd_percentage})
+                    
+                    # FTR Calc (Using all tasks in that month, assuming FTR is marked upon completion/delivery)
+                    ftr_yes = len(group[group['ftr_internal'] == 'Yes'])
+                    ftr_percentage = (ftr_yes / total_in_month) * 100 if total_in_month > 0 else 0
+                    ftr_stats.append({'Month': month, 'FTR %': ftr_percentage})
+
+                otd_df = pd.DataFrame(otd_stats).sort_values('Month')
+                ftr_df = pd.DataFrame(ftr_stats).sort_values('Month')
+                
+                c1, c2 = st.columns(2)
+                
+                with c1:
+                    st.markdown("### 📈 OTD % (Internal)")
+                    if not otd_df.empty:
+                        st.line_chart(otd_df, x='Month', y='OTD %')
+                    else:
+                        st.info("No sufficient data for OTD graph.")
+
+                with c2:
+                    st.markdown("### ✅ FTR % (Internal)")
+                    if not ftr_df.empty:
+                        st.line_chart(ftr_df, x='Month', y='FTR %')
+                    else:
+                        st.info("No sufficient data for FTR graph.")
+            
+            else:
+                st.info("No delivered tasks yet to generate Monthly trends.")
+
+            st.markdown("---")
+            st.markdown("### 📊 Task Status Distribution")
+            
+            # Status Counts
+            status_counts = df['status'].value_counts().reset_index()
+            status_counts.columns = ['Status', 'Count']
+            
+            st.bar_chart(status_counts, x='Status', y='Count', use_container_width=True)
+
+            # High Level Metrics Cards (Existing)
+            st.markdown("---")
             c1, c2, c3, c4 = st.columns(4)
             total = len(df)
             completed = len(df[df['status'] == 'Completed'])
             
-            # Calculate simple OTD % (Yes count / Total Completed)
+            # Overall OTD/FTR
             completed_tasks = df[df['status'] == 'Completed']
             otd_count = len(completed_tasks[completed_tasks['otd_internal'] == 'Yes'])
             otd_pct = round((otd_count / len(completed_tasks) * 100), 2) if len(completed_tasks) > 0 else 0
             
-            # FTR Internal %
             ftr_count = len(df[df['ftr_internal'] == 'Yes'])
             ftr_pct = round((ftr_count / total * 100), 2) if total > 0 else 0
 
             c1.metric("Total Tasks", total)
             c2.metric("Completed", completed)
-            c3.metric("OTD Internal %", f"{otd_pct}%")
-            c4.metric("FTR Internal %", f"{ftr_pct}%")
+            c3.metric("Overall OTD %", f"{otd_pct}%")
+            c4.metric("Overall FTR %", f"{ftr_pct}%")
         else:
             st.info("No data available yet.")
 
@@ -339,7 +412,10 @@ def team_member_view():
                             # Only show Date Picker if completing
                             actual_date_val = None
                             if row['actual_delivery_date']:
-                                default_date = datetime.strptime(row['actual_delivery_date'], '%Y-%m-%d').date()
+                                try:
+                                    default_date = datetime.strptime(row['actual_delivery_date'], '%Y-%m-%d').date()
+                                except:
+                                    default_date = date.today()
                             else:
                                 default_date = date.today()
                                 
