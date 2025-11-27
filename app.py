@@ -105,9 +105,9 @@ def init_db():
     conn = sqlite3.connect('kpi_data.db')
     c = conn.cursor()
     
-    # Create Tasks Table
+    # Create Tasks Table (Updated to v2 to ensure clean schema)
     c.execute('''
-        CREATE TABLE IF NOT EXISTS tasks (
+        CREATE TABLE IF NOT EXISTS tasks_v2 (
             id TEXT PRIMARY KEY,
             name_activity_pilot TEXT,
             task_name TEXT,
@@ -146,8 +146,9 @@ def add_task(data):
     if data['actual_delivery_date'] and data['commitment_date_to_customer']:
          otd_cust = "Yes" if data['actual_delivery_date'] <= data['commitment_date_to_customer'] else "NO"
 
+    # FIXED: Added the 21st placeholder (?) to match the 21 columns
     c.execute('''
-        INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ''', (
         str(uuid.uuid4())[:8], 
         data['name_activity_pilot'],
@@ -176,7 +177,8 @@ def add_task(data):
 
 def get_all_tasks():
     conn = sqlite3.connect('kpi_data.db')
-    df = pd.read_sql_query("SELECT * FROM tasks", conn)
+    # Using tasks_v2
+    df = pd.read_sql_query("SELECT * FROM tasks_v2", conn)
     conn.close()
     return df
 
@@ -185,7 +187,7 @@ def update_task_status(task_id, new_status, new_actual_date=None):
     c = conn.cursor()
     
     if new_actual_date:
-        c.execute("SELECT commitment_date_to_customer FROM tasks WHERE id=?", (task_id,))
+        c.execute("SELECT commitment_date_to_customer FROM tasks_v2 WHERE id=?", (task_id,))
         res = c.fetchone()
         comm_date_str = res[0]
         
@@ -197,10 +199,10 @@ def update_task_status(task_id, new_status, new_actual_date=None):
             except:
                 pass 
 
-        c.execute('''UPDATE tasks SET status = ?, actual_delivery_date = ?, otd_internal = ?, otd_customer = ? WHERE id = ?''', 
+        c.execute('''UPDATE tasks_v2 SET status = ?, actual_delivery_date = ?, otd_internal = ?, otd_customer = ? WHERE id = ?''', 
                   (new_status, new_actual_date, otd_val, otd_val, task_id))
     else:
-        c.execute("UPDATE tasks SET status = ? WHERE id = ?", (new_status, task_id))
+        c.execute("UPDATE tasks_v2 SET status = ? WHERE id = ?", (new_status, task_id))
         
     conn.commit()
     conn.close()
