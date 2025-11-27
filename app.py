@@ -4,8 +4,8 @@ import sqlite3
 import uuid
 import plotly.express as px
 import plotly.graph_objects as go
-import random
 from datetime import date, datetime, timedelta
+import io
 
 # --- CONFIGURATION & SETUP ---
 st.set_page_config(page_title="KPI Management System", layout="wide", page_icon="📊")
@@ -18,13 +18,14 @@ st.markdown("""
         background-color: #f8f9fa;
     }
     
-    /* Card Style */
+    /* Card Style - ensuring full width */
     .dashboard-card {
         background-color: white;
         padding: 20px;
         border-radius: 15px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         margin-bottom: 20px;
+        width: 100%; /* Fix for 'half filled' issue */
     }
     
     /* Metric Card Styling */
@@ -67,34 +68,38 @@ st.markdown("""
         font-size: 20px;
     }
     
-    /* Custom Button Styling to match 'New Job' */
+    /* Custom Button Styling */
     div.stButton > button:first-child {
         border-radius: 8px;
         font-weight: 600;
     }
     
-    /* Table Styling */
-    .styled-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-family: sans-serif;
-    }
-    .styled-table thead tr {
-        background-color: #f8f9fa;
-        color: #6c757d;
-        text-align: left;
+    /* Edit Button Specific */
+    .edit-btn {
+        border: 1px solid #dfe0e1;
+        background-color: white;
+        color: #333;
+        padding: 5px 10px;
+        border-radius: 5px;
+        cursor: pointer;
+        text-decoration: none;
+        font-size: 12px;
     }
     
-    /* Status Badges */
-    .badge {
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 12px;
+    /* Table Header Style for Custom List */
+    .list-header {
         font-weight: bold;
+        color: #6c757d;
+        border-bottom: 2px solid #f1f3f5;
+        padding-bottom: 10px;
+        margin-bottom: 10px;
     }
-    .badge-high { background-color: #ffebee; color: #c62828; }
-    .badge-medium { background-color: #fff3e0; color: #ef6c00; }
-    .badge-low { background-color: #e8f5e9; color: #2e7d32; }
+    .list-row {
+        padding: 15px 0;
+        border-bottom: 1px solid #f1f3f5;
+        display: flex;
+        align-items: center;
+    }
     
 </style>
 """, unsafe_allow_html=True)
@@ -105,7 +110,7 @@ def init_db():
     conn = sqlite3.connect('kpi_data.db')
     c = conn.cursor()
     
-    # Create Tasks Table (Updated to v2 to ensure clean schema)
+    # Using tasks_v2 to match schema
     c.execute('''
         CREATE TABLE IF NOT EXISTS tasks_v2 (
             id TEXT PRIMARY KEY,
@@ -134,84 +139,86 @@ def init_db():
     conn.commit()
     conn.close()
 
-def add_task(data):
+def add_task(data, task_id=None):
     conn = sqlite3.connect('kpi_data.db')
     c = conn.cursor()
     
+    # Logic for OTD
     otd_int = "N/A"
     if data['actual_delivery_date'] and data['commitment_date_to_customer']:
-        otd_int = "Yes" if data['actual_delivery_date'] <= data['commitment_date_to_customer'] else "NO"
+        otd_int = "Yes" if str(data['actual_delivery_date']) <= str(data['commitment_date_to_customer']) else "NO"
         
     otd_cust = "N/A" 
     if data['actual_delivery_date'] and data['commitment_date_to_customer']:
-         otd_cust = "Yes" if data['actual_delivery_date'] <= data['commitment_date_to_customer'] else "NO"
+         otd_cust = "Yes" if str(data['actual_delivery_date']) <= str(data['commitment_date_to_customer']) else "NO"
 
-    # FIXED: Added the 21st placeholder (?) to match the 21 columns
-    c.execute('''
-        INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    ''', (
-        str(uuid.uuid4())[:8], 
-        data['name_activity_pilot'],
-        data['task_name'],
-        data['date_of_receipt'],
-        data['actual_delivery_date'],
-        data['commitment_date_to_customer'],
-        data['status'],
-        data['ftr_customer'],
-        data['reference_part_number'],
-        data['ftr_internal'],
-        otd_int,
-        data['description_of_activity'],
-        data['activity_type'],
-        data['ftr_quality_gate_internal'],
-        data['date_of_clarity_in_input'],
-        data['start_date'],
-        otd_cust,
-        data['customer_remarks'],
-        data['name_quality_gate_referent'],
-        data['project_lead'],
-        data['customer_manager_name']
-    ))
+    if task_id:
+        # Update existing
+        c.execute('''
+            UPDATE tasks_v2 SET
+            name_activity_pilot=?, task_name=?, date_of_receipt=?, actual_delivery_date=?, 
+            commitment_date_to_customer=?, status=?, ftr_customer=?, reference_part_number=?, 
+            ftr_internal=?, otd_internal=?, description_of_activity=?, activity_type=?, 
+            ftr_quality_gate_internal=?, date_of_clarity_in_input=?, start_date=?, otd_customer=?, 
+            customer_remarks=?, name_quality_gate_referent=?, project_lead=?, customer_manager_name=?
+            WHERE id=?
+        ''', (
+            data['name_activity_pilot'], data['task_name'], data['date_of_receipt'], data['actual_delivery_date'],
+            data['commitment_date_to_customer'], data['status'], data['ftr_customer'], data['reference_part_number'],
+            data['ftr_internal'], otd_int, data['description_of_activity'], data['activity_type'],
+            data['ftr_quality_gate_internal'], data['date_of_clarity_in_input'], data['start_date'], otd_cust,
+            data['customer_remarks'], data['name_quality_gate_referent'], data['project_lead'], data['customer_manager_name'],
+            task_id
+        ))
+    else:
+        # Create new
+        new_id = str(uuid.uuid4())[:8]
+        c.execute('''
+            INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ''', (
+            new_id, 
+            data['name_activity_pilot'], data['task_name'], data['date_of_receipt'], data['actual_delivery_date'],
+            data['commitment_date_to_customer'], data['status'], data['ftr_customer'], data['reference_part_number'],
+            data['ftr_internal'], otd_int, data['description_of_activity'], data['activity_type'],
+            data['ftr_quality_gate_internal'], data['date_of_clarity_in_input'], data['start_date'], otd_cust,
+            data['customer_remarks'], data['name_quality_gate_referent'], data['project_lead'], data['customer_manager_name']
+        ))
+        
     conn.commit()
     conn.close()
 
 def get_all_tasks():
     conn = sqlite3.connect('kpi_data.db')
-    # Using tasks_v2
-    df = pd.read_sql_query("SELECT * FROM tasks_v2", conn)
+    try:
+        df = pd.read_sql_query("SELECT * FROM tasks_v2", conn)
+    except:
+        df = pd.DataFrame() # Handle case where table might not exist yet
     conn.close()
     return df
 
-def update_task_status(task_id, new_status, new_actual_date=None):
+def delete_all_data():
     conn = sqlite3.connect('kpi_data.db')
     c = conn.cursor()
-    
-    if new_actual_date:
-        c.execute("SELECT commitment_date_to_customer FROM tasks_v2 WHERE id=?", (task_id,))
-        res = c.fetchone()
-        comm_date_str = res[0]
-        
-        otd_val = "NO"
-        if comm_date_str:
-            try:
-                comm_date = datetime.strptime(comm_date_str, '%Y-%m-%d').date()
-                otd_val = "Yes" if new_actual_date <= comm_date else "NO"
-            except:
-                pass 
-
-        c.execute('''UPDATE tasks_v2 SET status = ?, actual_delivery_date = ?, otd_internal = ?, otd_customer = ? WHERE id = ?''', 
-                  (new_status, new_actual_date, otd_val, otd_val, task_id))
-    else:
-        c.execute("UPDATE tasks_v2 SET status = ? WHERE id = ?", (new_status, task_id))
-        
+    c.execute("DELETE FROM tasks_v2")
     conn.commit()
     conn.close()
+
+def import_data_from_csv(file):
+    try:
+        df = pd.read_csv(file)
+        conn = sqlite3.connect('kpi_data.db')
+        # Append to database, ensure columns match
+        df.to_sql('tasks_v2', conn, if_exists='append', index=False)
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Error importing: {e}")
+        return False
 
 # --- AUTHENTICATION MOCK ---
 USERS = {
     "leader": {"password": "123", "role": "Team Leader", "name": "Alice (Lead)"},
     "member1": {"password": "123", "role": "Team Member", "name": "Bob (Member)"},
-    "member2": {"password": "123", "role": "Team Member", "name": "Charlie (Member)"}
 }
 
 def login_page():
@@ -247,12 +254,12 @@ def login_page():
 def metric_card(title, value, trend, icon_color, icon_char):
     trend_cls = "trend-up" if "+" in trend else "trend-down"
     st.markdown(f"""
-    <div class="dashboard-card">
+    <div class="dashboard-card" style="margin-bottom: 0px;">
         <div class="metric-container">
             <div>
                 <div class="metric-value">{value}</div>
                 <div class="metric-label">{title}</div>
-                <div class="metric-trend {trend_cls}">{trend} last month</div>
+                <div class="metric-trend {trend_cls}">{trend}</div>
             </div>
             <div class="icon-box" style="background-color: {icon_color}20; color: {icon_color};">
                 {icon_char}
@@ -261,21 +268,29 @@ def metric_card(title, value, trend, icon_color, icon_char):
     </div>
     """, unsafe_allow_html=True)
 
-def project_analytics_chart():
-    # Demo data generation if empty
-    dates = pd.date_range(start="2024-01-01", periods=12, freq="M")
-    df_chart = pd.DataFrame({
-        "Date": dates,
-        "Completed": [random.randint(10, 40) for _ in range(12)],
-        "InProgress": [random.randint(5, 20) for _ in range(12)]
-    })
+# --- REAL DATA GRAPHS ---
+def get_analytics_chart(df):
+    if df.empty:
+        return go.Figure()
+
+    # Ensure date format
+    df['start_date'] = pd.to_datetime(df['start_date'], errors='coerce')
+    df['month'] = df['start_date'].dt.strftime('%Y-%m')
+    
+    # Aggregate
+    monthly_counts = df.groupby(['month', 'status']).size().reset_index(name='count')
+    
+    # Pivot for chart
+    pivot_df = monthly_counts.pivot(index='month', columns='status', values='count').fillna(0).reset_index()
     
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df_chart['Date'], y=df_chart['Completed'], fill='tozeroy', name='Completed', line=dict(color='#82ca9d')))
-    fig.add_trace(go.Scatter(x=df_chart['Date'], y=df_chart['InProgress'], fill='tozeroy', name='In Progress', line=dict(color='#8884d8')))
+    if 'Completed' in pivot_df.columns:
+        fig.add_trace(go.Scatter(x=pivot_df['month'], y=pivot_df['Completed'], fill='tozeroy', name='Completed', line=dict(color='#1cc88a')))
+    if 'Inprogress' in pivot_df.columns:
+        fig.add_trace(go.Scatter(x=pivot_df['month'], y=pivot_df['Inprogress'], fill='tozeroy', name='In Progress', line=dict(color='#4e73df')))
     
     fig.update_layout(
-        title="Project Analytics",
+        title="Project Analytics (Real Data)",
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         margin=dict(l=0, r=0, t=30, b=0),
@@ -284,7 +299,14 @@ def project_analytics_chart():
     )
     return fig
 
-def progress_donut_chart(completed_pct):
+def get_donut_chart(df):
+    if df.empty:
+        completed_pct = 0
+    else:
+        total = len(df)
+        completed = len(df[df['status'] == 'Completed'])
+        completed_pct = int((completed / total) * 100) if total > 0 else 0
+        
     fig = go.Figure(data=[go.Pie(
         labels=['Completed', 'Pending'], 
         values=[completed_pct, 100-completed_pct], 
@@ -300,54 +322,122 @@ def progress_donut_chart(completed_pct):
     )
     return fig
 
-# --- FORM COMPONENT ---
-def create_job_form():
-    st.markdown("### Create New Job")
-    with st.form("create_task_form", clear_on_submit=True):
+def get_ftr_otd_chart(df):
+    if df.empty:
+        return go.Figure()
+        
+    df['actual_delivery_date'] = pd.to_datetime(df['actual_delivery_date'], errors='coerce')
+    df = df.dropna(subset=['actual_delivery_date']) # Only count delivered tasks
+    
+    # Group by month for simplicity in bar chart
+    df['month'] = df['actual_delivery_date'].dt.strftime('%b')
+    
+    # Calculate % Yes for OTD and FTR per month
+    monthly_stats = df.groupby('month').agg({
+        'otd_internal': lambda x: (x == 'Yes').mean() * 100,
+        'ftr_internal': lambda x: (x == 'Yes').mean() * 100
+    }).reset_index()
+    
+    fig = go.Figure(data=[
+        go.Bar(name='FTR', x=monthly_stats['month'], y=monthly_stats['ftr_internal'], marker_color='#1cc88a'),
+        go.Bar(name='OTD', x=monthly_stats['month'], y=monthly_stats['otd_internal'], marker_color='#4e73df')
+    ])
+    fig.update_layout(
+        title="FTR / OTD Trends", 
+        barmode='group', 
+        height=250, 
+        margin=dict(l=0, r=0, t=30, b=0), 
+        showlegend=False
+    )
+    return fig
+
+# --- FORM COMPONENT (Create / Edit) ---
+def task_form(mode="create", task_id=None, default_data=None):
+    form_title = "Create New Job" if mode == "create" else "Edit Job Details"
+    btn_text = "Create Job" if mode == "create" else "Update Job"
+    
+    st.markdown(f"### {form_title}")
+    
+    # If no default data (create mode), create empty dict structure
+    if not default_data:
+        default_data = {k: None for k in ["task_name", "name_activity_pilot", "activity_type", "reference_part_number", 
+                                          "status", "start_date", "date_of_receipt", "date_of_clarity_in_input", 
+                                          "commitment_date_to_customer", "project_lead", "name_quality_gate_referent", 
+                                          "ftr_internal", "description_of_activity", "customer_manager_name", 
+                                          "customer_remarks", "actual_delivery_date"]}
+        # Set defaults for required fields to avoid NoneType errors in widgets if needed
+        default_data["project_lead"] = st.session_state['name']
+
+    with st.form("task_form_component", clear_on_submit=(mode=="create")):
         col1, col2, col3 = st.columns(3)
         pilots = [u['name'] for k,u in USERS.items() if u['role'] == "Team Member"]
 
+        # Parse dates if they are strings from DB
+        def parse_d(d_val):
+            if isinstance(d_val, str) and d_val:
+                try: return datetime.strptime(d_val, '%Y-%m-%d').date()
+                except: return None
+            return d_val
+
         with col1:
-            task_name = st.text_input("Task Name")
-            name_pilot = st.selectbox("Assign To", pilots, index=None, placeholder="Select Pilot...")
-            activity_type = st.selectbox("Type", ["3d development", "2d drawing", "Release"], index=None)
-            ref_part = st.text_input("Ref Part Number")
+            task_name = st.text_input("Task Name", value=default_data.get("task_name"))
+            
+            # Handle Selectbox defaults
+            p_idx = pilots.index(default_data["name_activity_pilot"]) if default_data.get("name_activity_pilot") in pilots else None
+            name_pilot = st.selectbox("Assign To", pilots, index=p_idx, placeholder="Select Pilot...")
+            
+            types = ["3d development", "2d drawing", "Release"]
+            t_idx = types.index(default_data["activity_type"]) if default_data.get("activity_type") in types else None
+            activity_type = st.selectbox("Type", types, index=t_idx)
+            
+            ref_part = st.text_input("Ref Part Number", value=default_data.get("reference_part_number"))
             
         with col2:
-            status = st.selectbox("Initial Status", ["Hold", "Inprogress"], index=1)
-            start_date = st.date_input("Start Date", value=date.today())
-            date_receipt = st.date_input("Date of Receipt", value=date.today())
-            date_clarity = st.date_input("Date Clarity", value=date.today())
+            statuses = ["Hold", "Inprogress", "Completed", "Cancelled"]
+            s_idx = statuses.index(default_data["status"]) if default_data.get("status") in statuses else 1
+            status = st.selectbox("Current Status", statuses, index=s_idx)
+            
+            start_date = st.date_input("Start Date", value=parse_d(default_data.get("start_date")))
+            date_receipt = st.date_input("Date of Receipt", value=parse_d(default_data.get("date_of_receipt")))
+            date_clarity = st.date_input("Date Clarity", value=parse_d(default_data.get("date_of_clarity_in_input")))
             
         with col3:
-            comm_date = st.date_input("Commitment Date", value=None)
-            project_lead = st.text_input("Project Lead", value=st.session_state['name'])
-            qual_ref = st.text_input("Quality Gate Ref")
+            comm_date = st.date_input("Commitment Date", value=parse_d(default_data.get("commitment_date_to_customer")))
+            
+            # Show actual date if editing
+            act_date_val = parse_d(default_data.get("actual_delivery_date"))
+            actual_date = st.date_input("Actual Delivery", value=act_date_val)
+            
+            project_lead = st.text_input("Project Lead", value=default_data.get("project_lead"))
+            qual_ref = st.text_input("Quality Gate Ref", value=default_data.get("name_quality_gate_referent"))
 
         st.markdown("---")
         c1, c2 = st.columns(2)
         with c1:
-            ftr_int = st.selectbox("FTR Internal Target", ["Yes", "NO"], index=0)
-            desc = st.text_area("Description")
+            ftr_opts = ["Yes", "NO"]
+            f_idx = ftr_opts.index(default_data["ftr_internal"]) if default_data.get("ftr_internal") in ftr_opts else 0
+            ftr_int = st.selectbox("FTR Internal Target", ftr_opts, index=f_idx)
+            
+            desc = st.text_area("Description", value=default_data.get("description_of_activity"))
         with c2:
-            cust_manager = st.text_input("Customer Manager")
-            remarks = st.text_area("Initial Remarks")
-
-        # Hidden/Default fields
-        ftr_cust = "N/A"
-        ftr_gate = "N/A"
+            cust_manager = st.text_input("Customer Manager", value=default_data.get("customer_manager_name"))
+            remarks = st.text_area("Remarks", value=default_data.get("customer_remarks"))
         
-        submitted = st.form_submit_button("Create Job", type="primary")
+        # Hidden defaults
+        ftr_cust = default_data.get("ftr_customer", "N/A")
+        ftr_gate = default_data.get("ftr_quality_gate_internal", "N/A")
+
+        submitted = st.form_submit_button(btn_text, type="primary")
         
         if submitted:
             if not task_name or not comm_date:
                 st.error("Task Name and Commitment Date are required.")
             else:
-                new_task = {
+                form_data = {
                     "name_activity_pilot": name_pilot,
                     "task_name": task_name,
                     "date_of_receipt": date_receipt,
-                    "actual_delivery_date": None, 
+                    "actual_delivery_date": actual_date, 
                     "commitment_date_to_customer": comm_date,
                     "status": status,
                     "ftr_customer": ftr_cust,
@@ -363,35 +453,60 @@ def create_job_form():
                     "project_lead": project_lead,
                     "customer_manager_name": cust_manager
                 }
-                add_task(new_task)
-                st.success("Job Created Successfully!")
-                st.session_state['show_form'] = False # Close form
+                
+                add_task(form_data, task_id=task_id) # Pass ID if editing
+                st.success(f"{btn_text} Successfully!")
+                st.session_state['show_form'] = False
+                st.session_state['edit_mode'] = False
+                st.session_state['edit_task_id'] = None
                 st.rerun()
 
-    if st.button("Cancel"):
+    if st.button("Cancel / Close Form"):
         st.session_state['show_form'] = False
+        st.session_state['edit_mode'] = False
+        st.session_state['edit_task_id'] = None
         st.rerun()
 
 # --- TEAM LEADER DASHBOARD ---
 def team_leader_view():
-    # --- Top Bar ---
-    col_title, col_btn, col_profile = st.columns([6, 1.5, 0.5])
+    df = get_all_tasks()
+    
+    # --- Top Bar with Import/Export ---
+    col_title, col_actions, col_profile = st.columns([4, 4, 1])
     with col_title:
-        st.title("Home")
-    with col_btn:
-        st.write("") # Spacer
-        if st.button("✚ New Job", type="primary", use_container_width=True):
-            st.session_state['show_form'] = True
+        st.title("Dashboard")
+        
+    with col_actions:
+        # Import / Export Layout
+        c_imp, c_exp, c_new = st.columns([1.5, 1, 1])
+        with c_imp:
+             uploaded_file = st.file_uploader("Import CSV", type=['csv'], label_visibility="collapsed")
+             if uploaded_file:
+                 if import_data_from_csv(uploaded_file):
+                     st.success("Imported!")
+                     st.rerun()
+        with c_exp:
+             if not df.empty:
+                 csv = df.to_csv(index=False).encode('utf-8')
+                 st.download_button("Export CSV", csv, "kpi_tasks.csv", "text/csv", use_container_width=True)
+        with c_new:
+            if st.button("✚ New Job", type="primary", use_container_width=True):
+                st.session_state['show_form'] = True
+                st.session_state['edit_mode'] = False
+                
     with col_profile:
         st.image("https://api.dicebear.com/7.x/avataaars/svg?seed=Felix", width=50)
 
-    # --- CONDITIONAL FORM RENDER ---
+    # --- CONDITIONAL FORM RENDER (CREATE or EDIT) ---
     if st.session_state.get('show_form', False):
         st.markdown("---")
-        create_job_form()
+        if st.session_state.get('edit_mode', False) and st.session_state.get('edit_task_id'):
+            # Fetch specific task data
+            task_data = df[df['id'] == st.session_state['edit_task_id']].iloc[0].to_dict()
+            task_form(mode="edit", task_id=st.session_state['edit_task_id'], default_data=task_data)
+        else:
+            task_form(mode="create")
         st.markdown("---")
-
-    df = get_all_tasks()
     
     # --- METRICS ROW ---
     c1, c2, c3, c4 = st.columns(4)
@@ -401,199 +516,107 @@ def team_leader_view():
     on_hold = len(df[df['status'] == 'Hold'])
     delivered = len(df[df['status'] == 'Completed'])
     
-    with c1: metric_card("Jobs Created", total_jobs, "+4.65%", "#4e73df", "💼")
-    with c2: metric_card("Task InProgress", in_progress, "+2.65%", "#36b9cc", "📂")
-    with c3: metric_card("Hold", on_hold, "-1.2%", "#e74a3b", "🛑")
-    with c4: metric_card("Delivered", delivered, "+6.65%", "#1cc88a", "🤝")
+    # Trend Logic (Comparing against previous month would require more complex DB logic, using mock trend for now or simplified)
+    with c1: metric_card("Jobs Created", total_jobs, "Total", "#4e73df", "💼")
+    with c2: metric_card("Task InProgress", in_progress, "Active", "#36b9cc", "📂")
+    with c3: metric_card("Hold", on_hold, "Paused", "#e74a3b", "🛑")
+    with c4: metric_card("Delivered", delivered, "Done", "#1cc88a", "🤝")
 
     # --- CHARTS ROW ---
+    st.markdown("<br>", unsafe_allow_html=True)
     c_left, c_right = st.columns([2, 1])
     
     with c_left:
         with st.container():
             st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
-            st.plotly_chart(project_analytics_chart(), use_container_width=True)
+            if not df.empty:
+                st.plotly_chart(get_analytics_chart(df), use_container_width=True)
+            else:
+                st.info("No data for analytics.")
             st.markdown('</div>', unsafe_allow_html=True)
             
     with c_right:
         with st.container():
             st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
-            st.markdown("##### My Progress")
-            st.markdown("<p style='font-size:12px;color:grey;'>Your task completion rate</p>", unsafe_allow_html=True)
-            
-            completion_rate = int((delivered / total_jobs * 100)) if total_jobs > 0 else 0
-            st.plotly_chart(progress_donut_chart(completion_rate), use_container_width=True)
-            
-            st.markdown(f"""
-            <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px;">
-                <div style="text-align:center;"><b>{completion_rate}%</b><br><span style="color:grey">Completed</span></div>
-                <div style="text-align:center;"><b>{100-completion_rate}%</b><br><span style="color:grey">Pending</span></div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown("##### Progress Rate")
+            if not df.empty:
+                st.plotly_chart(get_donut_chart(df), use_container_width=True)
+            else:
+                st.info("No data.")
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- FILTER & TABLE ROW ---
+    # --- CUSTOM LIST VIEW WITH ACTION BUTTONS ---
     with st.container():
         st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
         
-        # Filter Bar
-        f1, f2, f3, f4 = st.columns([1,1,1,1])
-        with f1: st.date_input("From", date.today() - timedelta(days=30), key="f_from")
-        with f2: st.date_input("To", date.today(), key="f_to")
-        with f3: st.selectbox("Select Priority", ["All", "High", "Medium", "Low"], key="f_prio")
-        with f4: 
-            st.write("")
-            st.write("")
-            st.button("Search", use_container_width=True)
+        # Filter Bar (Visual only for now, can be wired up easily)
+        f1, f2, f3 = st.columns([1,1,2])
+        with f1: st.selectbox("Priority", ["All", "High", "Medium"], label_visibility="collapsed")
+        with f2: st.button("Filter", use_container_width=True)
         
-        st.markdown("### Active Tasks")
+        st.markdown("### Active Tasks List")
         
-        # Display Table
+        # Header
+        h1, h2, h3, h4, h5 = st.columns([2, 1.5, 1.5, 1.5, 1])
+        h1.markdown("**Task Name**")
+        h2.markdown("**Assigned To**")
+        h3.markdown("**Deadline**")
+        h4.markdown("**Status**")
+        h5.markdown("**Action**")
+        st.markdown("<hr style='margin: 5px 0;'>", unsafe_allow_html=True)
+        
+        # Rows
         if not df.empty:
-            # Customizing DF for display
-            display_df = df[['task_name', 'status', 'start_date', 'commitment_date_to_customer', 'name_activity_pilot']].copy()
-            display_df.columns = ['Task', 'Work Status', 'Start Date', 'Deadline', 'Assigned To']
+            # Sort by date
+            df = df.sort_values(by="start_date", ascending=False)
             
-            # Add mock Priority for visuals (not in DB yet)
-            display_df['Priority'] = [random.choice(['High', 'Medium', 'Low']) for _ in range(len(display_df))]
-            
-            # Reorder
-            display_df = display_df[['Task', 'Priority', 'Start Date', 'Deadline', 'Work Status', 'Assigned To']]
-            
-            st.dataframe(
-                display_df,
-                hide_index=True,
-                use_container_width=True,
-                column_config={
-                    "Work Status": st.column_config.TextColumn(
-                        "Work Status",
-                        help="Current status",
-                        width="medium"
-                    ),
-                    "Priority": st.column_config.TextColumn(
-                        "Priority",
-                        width="small"
-                    )
-                }
-            )
+            for index, row in df.iterrows():
+                c1, c2, c3, c4, c5 = st.columns([2, 1.5, 1.5, 1.5, 1])
+                
+                with c1: st.write(row['task_name'])
+                with c2: st.write(row['name_activity_pilot'])
+                with c3: st.write(row['commitment_date_to_customer'])
+                
+                # Status Badge logic
+                s_color = "gray"
+                if row['status'] == "Completed": s_color = "green"
+                elif row['status'] == "Inprogress": s_color = "blue"
+                elif row['status'] == "Hold": s_color = "orange"
+                
+                with c4: st.markdown(f":{s_color}[{row['status']}]")
+                
+                with c5:
+                    if st.button("Edit", key=f"btn_edit_{row['id']}"):
+                        st.session_state['show_form'] = True
+                        st.session_state['edit_mode'] = True
+                        st.session_state['edit_task_id'] = row['id']
+                        st.rerun()
+                
+                st.markdown("<hr style='margin: 5px 0; opacity: 0.2;'>", unsafe_allow_html=True)
         else:
             st.info("No active tasks found.")
             
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- TEAM MEMBERS ROW ---
-    c_team, c_perf = st.columns([2, 1])
-    
-    with c_team:
-        with st.container():
-            st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
-            st.markdown("### Team Members")
-            
-            # Mock Team Data
-            team_data = [
-                {"name": "Alice (Lead)", "role": "UI/UX Designer", "tasks": "18/20", "perf": "+12%"},
-                {"name": "Bob (Member)", "role": "Frontend Dev", "tasks": "24/30", "perf": "+8%"},
-                {"name": "Charlie (Member)", "role": "Backend Dev", "tasks": "14/15", "perf": "+15%"},
-            ]
-            
-            for member in team_data:
-                st.markdown(f"""
-                <div style="display:flex; justify-content:space-between; align-items:center; padding: 10px 0; border-bottom: 1px solid #eee;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <div style="width:40px; height:40px; border-radius:50%; background-color:#eee; display:flex; align-items:center; justify-content:center;">👤</div>
-                        <div>
-                            <div style="font-weight:bold;">{member['name']}</div>
-                            <div style="font-size:12px; color:grey;">{member['role']}</div>
-                        </div>
-                    </div>
-                    <div><span style="font-weight:bold;">{member['tasks']}</span> tasks</div>
-                    <div style="color:green; font-weight:bold; background-color:#e8f5e9; padding:2px 8px; border-radius:10px; font-size:12px;">{member['perf']}</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-            st.markdown('</div>', unsafe_allow_html=True)
-
-    with c_perf:
-        with st.container():
-            st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
-            st.markdown("### FTR / OTD")
-            
-            # Simple Bar Chart for FTR/OTD
-            x = ['Week 1', 'Week 2', 'Week 3', 'Week 4']
-            fig_bar = go.Figure(data=[
-                go.Bar(name='FTR', x=x, y=[80, 50, 90, 60], marker_color='#1cc88a'),
-                go.Bar(name='OTD', x=x, y=[60, 70, 80, 50], marker_color='#4e73df')
-            ])
-            fig_bar.update_layout(barmode='group', height=250, margin=dict(l=0, r=0, t=20, b=0), showlegend=False)
-            st.plotly_chart(fig_bar, use_container_width=True)
-            
-            st.markdown('</div>', unsafe_allow_html=True)
+    # --- FTR/OTD Bottom Chart ---
+    with st.container():
+        st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
+        if not df.empty:
+            st.plotly_chart(get_ftr_otd_chart(df), use_container_width=True)
+        else:
+            st.info("Not enough data for FTR/OTD.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
-# --- TEAM MEMBER VIEW (KANBAN - Kept Functionality) ---
+# --- TEAM MEMBER VIEW (Simple List) ---
 def team_member_view():
-    st.title(f"👷 Team Member Workspace: {st.session_state['name']}")
-    
-    # Filter options
-    show_all = st.checkbox("Show All Team Tasks", value=False)
-    
+    st.title(f"Tasks for {st.session_state['name']}")
     df = get_all_tasks()
-    
-    if not show_all:
-        df = df[df['name_activity_pilot'] == st.session_state['name']]
-    
-    st.markdown("### Kanban Board")
-    
-    # Kanban Columns
-    cols = st.columns(4)
-    statuses = ["Hold", "Inprogress", "Completed", "Cancelled"]
-    colors = ["#FFA500", "#3498DB", "#2ECC71", "#E74C3C"]
-    
-    for i, status in enumerate(statuses):
-        with cols[i]:
-            st.markdown(f"<div class='status-header' style='background-color:{colors[i]}'>{status}</div>", unsafe_allow_html=True)
-            
-            # Filter tasks for this column
-            tasks_in_col = df[df['status'] == status]
-            
-            for index, row in tasks_in_col.iterrows():
-                # Kanban Card
-                with st.container():
-                    st.markdown(f"""
-                    <div class='kanban-card'>
-                        <b>{row['task_name']}</b><br>
-                        <small>ID: {row['id']}</small><br>
-                        <small>Ref: {row['reference_part_number']}</small><br>
-                        <small>Due: {row['commitment_date_to_customer']}</small>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Update functionality inside expader
-                    with st.expander("Update / Details"):
-                        st.text(f"Desc: {row['description_of_activity']}")
-                        st.text(f"Internal OTD: {row['otd_internal']}")
-                        
-                        # Form to prevent auto-reloading on every change
-                        with st.form(key=f"form_{row['id']}"):
-                            new_status = st.selectbox("Status", statuses, index=statuses.index(status))
-                            
-                            actual_date_val = None
-                            if row['actual_delivery_date']:
-                                try:
-                                    default_date = datetime.strptime(row['actual_delivery_date'], '%Y-%m-%d').date()
-                                except:
-                                    default_date = date.today()
-                            else:
-                                default_date = date.today()
-                                
-                            new_actual_date = st.date_input("Actual Delivery Date", value=default_date)
-                            
-                            update_btn = st.form_submit_button("Update")
-                            
-                            if update_btn:
-                                update_task_status(row['id'], new_status, new_actual_date)
-                                st.success("Updated!")
-                                st.rerun()
+    if not df.empty:
+        my_tasks = df[df['name_activity_pilot'] == st.session_state['name']]
+        st.dataframe(my_tasks)
+    else:
+        st.info("No tasks found.")
 
 # --- MAIN APP LOGIC ---
 
