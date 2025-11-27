@@ -23,11 +23,39 @@ st.markdown("""
         background-color: white;
         padding: 20px;
         border-radius: 15px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
         margin-bottom: 20px;
-        width: 100%; /* Fix for 'half filled' issue */
+        width: 100% !important;
+        height: 100%;
     }
     
+    /* Kanban Card */
+    .kanban-card {
+        background-color: white;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 5px solid #4CAF50;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+    .kanban-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+    }
+    
+    /* Status Header for Kanban */
+    .status-header {
+        text-align: center;
+        padding: 8px;
+        color: white;
+        border-radius: 5px;
+        margin-bottom: 15px;
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 0.9em;
+    }
+
     /* Metric Card Styling */
     .metric-container {
         display: flex;
@@ -85,22 +113,6 @@ st.markdown("""
         text-decoration: none;
         font-size: 12px;
     }
-    
-    /* Table Header Style for Custom List */
-    .list-header {
-        font-weight: bold;
-        color: #6c757d;
-        border-bottom: 2px solid #f1f3f5;
-        padding-bottom: 10px;
-        margin-bottom: 10px;
-    }
-    .list-row {
-        padding: 15px 0;
-        border-bottom: 1px solid #f1f3f5;
-        display: flex;
-        align-items: center;
-    }
-    
 </style>
 """, unsafe_allow_html=True)
 
@@ -146,6 +158,7 @@ def add_task(data, task_id=None):
     # Logic for OTD
     otd_int = "N/A"
     if data['actual_delivery_date'] and data['commitment_date_to_customer']:
+        # Ensure string comparison works or convert to date
         otd_int = "Yes" if str(data['actual_delivery_date']) <= str(data['commitment_date_to_customer']) else "NO"
         
     otd_cust = "N/A" 
@@ -196,10 +209,25 @@ def get_all_tasks():
     conn.close()
     return df
 
-def delete_all_data():
+def update_task_status(task_id, new_status, new_actual_date=None):
     conn = sqlite3.connect('kpi_data.db')
     c = conn.cursor()
-    c.execute("DELETE FROM tasks_v2")
+    
+    # Recalculate OTD if date provided
+    c.execute("SELECT commitment_date_to_customer FROM tasks_v2 WHERE id=?", (task_id,))
+    res = c.fetchone()
+    comm_date_str = res[0]
+    
+    otd_val = "N/A"
+    if comm_date_str and new_actual_date:
+        otd_val = "Yes" if str(new_actual_date) <= str(comm_date_str) else "NO"
+
+    if new_actual_date:
+        c.execute('''UPDATE tasks_v2 SET status = ?, actual_delivery_date = ?, otd_internal = ?, otd_customer = ? WHERE id = ?''', 
+                  (new_status, new_actual_date, otd_val, otd_val, task_id))
+    else:
+        c.execute("UPDATE tasks_v2 SET status = ? WHERE id = ?", (new_status, task_id))
+        
     conn.commit()
     conn.close()
 
@@ -254,7 +282,7 @@ def login_page():
 def metric_card(title, value, trend, icon_color, icon_char):
     trend_cls = "trend-up" if "+" in trend else "trend-down"
     st.markdown(f"""
-    <div class="dashboard-card" style="margin-bottom: 0px;">
+    <div class="dashboard-card" style="margin-bottom: 0px; height: 100%;">
         <div class="metric-container">
             <div>
                 <div class="metric-value">{value}</div>
@@ -516,7 +544,6 @@ def team_leader_view():
     on_hold = len(df[df['status'] == 'Hold'])
     delivered = len(df[df['status'] == 'Completed'])
     
-    # Trend Logic (Comparing against previous month would require more complex DB logic, using mock trend for now or simplified)
     with c1: metric_card("Jobs Created", total_jobs, "Total", "#4e73df", "💼")
     with c2: metric_card("Task InProgress", in_progress, "Active", "#36b9cc", "📂")
     with c3: metric_card("Hold", on_hold, "Paused", "#e74a3b", "🛑")
@@ -556,8 +583,8 @@ def team_leader_view():
         
         st.markdown("### Active Tasks List")
         
-        # Header
-        h1, h2, h3, h4, h5 = st.columns([2, 1.5, 1.5, 1.5, 1])
+        # Header - Adjusted ratios for better spacing
+        h1, h2, h3, h4, h5 = st.columns([3, 2, 2, 1.5, 1])
         h1.markdown("**Task Name**")
         h2.markdown("**Assigned To**")
         h3.markdown("**Deadline**")
@@ -571,7 +598,7 @@ def team_leader_view():
             df = df.sort_values(by="start_date", ascending=False)
             
             for index, row in df.iterrows():
-                c1, c2, c3, c4, c5 = st.columns([2, 1.5, 1.5, 1.5, 1])
+                c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 1.5, 1])
                 
                 with c1: st.write(row['task_name'])
                 with c2: st.write(row['name_activity_pilot'])
@@ -608,15 +635,71 @@ def team_leader_view():
         st.markdown('</div>', unsafe_allow_html=True)
 
 
-# --- TEAM MEMBER VIEW (Simple List) ---
+# --- TEAM MEMBER VIEW (Kanban Restored) ---
 def team_member_view():
-    st.title(f"Tasks for {st.session_state['name']}")
+    st.title(f"👷 Team Member Workspace: {st.session_state['name']}")
+    
+    # Filter options
+    show_all = st.checkbox("Show All Team Tasks", value=False)
+    
     df = get_all_tasks()
-    if not df.empty:
-        my_tasks = df[df['name_activity_pilot'] == st.session_state['name']]
-        st.dataframe(my_tasks)
-    else:
-        st.info("No tasks found.")
+    
+    if not show_all:
+        df = df[df['name_activity_pilot'] == st.session_state['name']]
+    
+    st.markdown("### Kanban Board")
+    
+    # Kanban Columns
+    cols = st.columns(4, gap="medium")
+    statuses = ["Hold", "Inprogress", "Completed", "Cancelled"]
+    colors = ["#FFA500", "#3498DB", "#2ECC71", "#E74C3C"]
+    
+    for i, status in enumerate(statuses):
+        with cols[i]:
+            st.markdown(f"<div class='status-header' style='background-color:{colors[i]}'>{status}</div>", unsafe_allow_html=True)
+            
+            # Filter tasks for this column
+            tasks_in_col = df[df['status'] == status]
+            
+            for index, row in tasks_in_col.iterrows():
+                # Kanban Card
+                with st.container():
+                    st.markdown(f"""
+                    <div class='kanban-card'>
+                        <b>{row['task_name']}</b><br>
+                        <small>ID: {row['id']}</small><br>
+                        <small>Ref: {row['reference_part_number']}</small><br>
+                        <small>Due: {row['commitment_date_to_customer']}</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Update functionality inside expader
+                    with st.expander("Update / Details"):
+                        st.text(f"Desc: {row['description_of_activity']}")
+                        st.text(f"Internal OTD: {row['otd_internal']}")
+                        
+                        # Form to prevent auto-reloading on every change
+                        with st.form(key=f"form_{row['id']}"):
+                            new_status = st.selectbox("Status", statuses, index=statuses.index(status))
+                            
+                            # Only show Date Picker if completing or need to update
+                            actual_date_val = None
+                            if row['actual_delivery_date']:
+                                try:
+                                    default_date = datetime.strptime(row['actual_delivery_date'], '%Y-%m-%d').date()
+                                except:
+                                    default_date = date.today()
+                            else:
+                                default_date = date.today()
+                                
+                            new_actual_date = st.date_input("Actual Delivery Date", value=default_date)
+                            
+                            update_btn = st.form_submit_button("Update")
+                            
+                            if update_btn:
+                                update_task_status(row['id'], new_status, new_actual_date)
+                                st.success("Updated!")
+                                st.rerun()
 
 # --- MAIN APP LOGIC ---
 
