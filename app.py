@@ -5,7 +5,6 @@ import uuid
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import date, datetime, timedelta
-import random
 
 # --- CONFIGURATION & SETUP ---
 st.set_page_config(page_title="KPI Management System", layout="wide", page_icon="📊")
@@ -150,55 +149,6 @@ def init_db():
         )
     ''')
     conn.commit()
-    conn.close()
-
-def create_demo_data():
-    """Generates 100 random demo data entries if database is empty"""
-    conn = sqlite3.connect('kpi_data.db')
-    c = conn.cursor()
-    try:
-        c.execute("SELECT count(*) FROM tasks_v2")
-        count = c.fetchone()[0]
-    except:
-        count = 0
-    
-    if count == 0:
-        pilots = ["Bob (Member)", "Charlie (Member)"]
-        statuses = ["Inprogress", "Completed", "Hold", "Cancelled"]
-        task_names = ["Design Update", "Website Develop", "App Testing", "Database Setup", "API Integration", "UI Cleanup", "Backend Refactor", "Security Audit"]
-        
-        today = date.today()
-        
-        for _ in range(100):
-            t_name = random.choice(task_names)
-            pilot = random.choice(pilots)
-            status = random.choice(statuses)
-            
-            # Start date in the last 3 months
-            start = today - timedelta(days=random.randint(1, 90))
-            due = start + timedelta(days=random.randint(5, 20))
-            
-            actual = None
-            otd_int = "N/A"
-            
-            if status == "Completed":
-                # Ensure 80% are on time for demo purposes
-                if random.random() > 0.2:
-                    actual = due - timedelta(days=random.randint(0, 3))
-                    otd_int = "Yes"
-                else:
-                    actual = due + timedelta(days=random.randint(1, 5))
-                    otd_int = "NO"
-            
-            ftr_int = "Yes" if random.random() > 0.15 else "NO"
-            
-            c.execute('''INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
-                str(uuid.uuid4())[:8], pilot, t_name, start, actual, due, status, 
-                "Yes", f"REF-{random.randint(1000,9999)}", ftr_int, otd_int, 
-                "Demo Task", "3d development", "Yes", start, start, 
-                "Yes", "", "Quality Ref", "Alice (Lead)", "Manager X"
-            ))
-        conn.commit()
     conn.close()
 
 def add_task(data, task_id=None):
@@ -715,7 +665,6 @@ def team_member_view():
 
 def main():
     init_db()
-    create_demo_data()
     if 'logged_in' not in st.session_state:
         st.session_state['logged_in'] = False
     if not st.session_state['logged_in']:
