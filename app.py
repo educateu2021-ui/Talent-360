@@ -18,15 +18,15 @@ st.markdown("""
         background-color: #f8f9fa;
     }
     
-    /* Card Style - ensuring full width */
+    /* Card Style - Ensuring full width and proper spacing */
     .dashboard-card {
         background-color: white;
-        padding: 20px;
+        padding: 25px;
         border-radius: 15px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         margin-bottom: 20px;
-        width: 100% !important;
-        height: 100%;
+        width: 100%;
+        overflow: hidden; /* Prevent content spill */
     }
     
     /* Kanban Card */
@@ -102,16 +102,44 @@ st.markdown("""
         font-weight: 600;
     }
     
-    /* Edit Button Specific */
-    .edit-btn {
-        border: 1px solid #dfe0e1;
-        background-color: white;
-        color: #333;
-        padding: 5px 10px;
-        border-radius: 5px;
-        cursor: pointer;
-        text-decoration: none;
+    /* Team Member Row Styling */
+    .team-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 0;
+        border-bottom: 1px solid #f1f3f5;
+    }
+    .team-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: #e9ecef;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        margin-right: 15px;
+    }
+    .team-info {
+        flex-grow: 1;
+    }
+    .team-name {
+        font-weight: 600;
+        font-size: 14px;
+        color: #343a40;
+    }
+    .team-role {
         font-size: 12px;
+        color: #868e96;
+    }
+    .team-stat {
+        background-color: #f8f9fa;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: bold;
+        color: #495057;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -247,6 +275,7 @@ def import_data_from_csv(file):
 USERS = {
     "leader": {"password": "123", "role": "Team Leader", "name": "Alice (Lead)"},
     "member1": {"password": "123", "role": "Team Member", "name": "Bob (Member)"},
+    "member2": {"password": "123", "role": "Team Member", "name": "Charlie (Member)"}
 }
 
 def login_page():
@@ -318,12 +347,14 @@ def get_analytics_chart(df):
         fig.add_trace(go.Scatter(x=pivot_df['month'], y=pivot_df['Inprogress'], fill='tozeroy', name='In Progress', line=dict(color='#4e73df')))
     
     fig.update_layout(
-        title="Project Analytics (Real Data)",
+        title="Project Analytics",
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         margin=dict(l=0, r=0, t=30, b=0),
         height=300,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        xaxis_title="Month",
+        yaxis_title="Tasks"
     )
     return fig
 
@@ -371,10 +402,10 @@ def get_ftr_otd_chart(df):
         go.Bar(name='OTD', x=monthly_stats['month'], y=monthly_stats['otd_internal'], marker_color='#4e73df')
     ])
     fig.update_layout(
-        title="FTR / OTD Trends", 
+        title="Team Performance (FTR / OTD)", 
         barmode='group', 
-        height=250, 
-        margin=dict(l=0, r=0, t=30, b=0), 
+        height=300, 
+        margin=dict(l=0, r=0, t=40, b=0), 
         showlegend=False
     )
     return fig
@@ -497,7 +528,7 @@ def task_form(mode="create", task_id=None, default_data=None):
 
 # --- TEAM LEADER DASHBOARD ---
 def team_leader_view():
-    df = get_all_tasks()
+    raw_df = get_all_tasks()
     
     # --- Top Bar with Import/Export ---
     col_title, col_actions, col_profile = st.columns([4, 4, 1])
@@ -514,8 +545,8 @@ def team_leader_view():
                      st.success("Imported!")
                      st.rerun()
         with c_exp:
-             if not df.empty:
-                 csv = df.to_csv(index=False).encode('utf-8')
+             if not raw_df.empty:
+                 csv = raw_df.to_csv(index=False).encode('utf-8')
                  st.download_button("Export CSV", csv, "kpi_tasks.csv", "text/csv", use_container_width=True)
         with c_new:
             if st.button("✚ New Job", type="primary", use_container_width=True):
@@ -530,11 +561,30 @@ def team_leader_view():
         st.markdown("---")
         if st.session_state.get('edit_mode', False) and st.session_state.get('edit_task_id'):
             # Fetch specific task data
-            task_data = df[df['id'] == st.session_state['edit_task_id']].iloc[0].to_dict()
+            task_data = raw_df[raw_df['id'] == st.session_state['edit_task_id']].iloc[0].to_dict()
             task_form(mode="edit", task_id=st.session_state['edit_task_id'], default_data=task_data)
         else:
             task_form(mode="create")
         st.markdown("---")
+    
+    # --- DATE FILTERS (ADDED) ---
+    with st.container():
+        st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
+        f1, f2, f3 = st.columns([1,1,1])
+        with f1: 
+            d_from = st.date_input("From Date", value=date.today() - timedelta(days=30))
+        with f2: 
+            d_to = st.date_input("To Date", value=date.today())
+        with f3:
+             f_priority = st.selectbox("Priority (Demo)", ["All", "High", "Medium", "Low"]) # Placeholder as Priority not in DB
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+    # --- FILTER LOGIC ---
+    df = raw_df.copy()
+    if not df.empty and 'start_date' in df.columns:
+        # Convert start_date to datetime for filtering
+        df['start_date'] = pd.to_datetime(df['start_date'], errors='coerce').dt.date
+        df = df[(df['start_date'] >= d_from) & (df['start_date'] <= d_to)]
     
     # --- METRICS ROW ---
     c1, c2, c3, c4 = st.columns(4)
@@ -572,15 +622,9 @@ def team_leader_view():
                 st.info("No data.")
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- CUSTOM LIST VIEW WITH ACTION BUTTONS ---
+    # --- ACTIVE TASKS LIST ---
     with st.container():
         st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
-        
-        # Filter Bar (Visual only for now, can be wired up easily)
-        f1, f2, f3 = st.columns([1,1,2])
-        with f1: st.selectbox("Priority", ["All", "High", "Medium"], label_visibility="collapsed")
-        with f2: st.button("Filter", use_container_width=True)
-        
         st.markdown("### Active Tasks List")
         
         # Header - Adjusted ratios for better spacing
@@ -594,9 +638,6 @@ def team_leader_view():
         
         # Rows
         if not df.empty:
-            # Sort by date
-            df = df.sort_values(by="start_date", ascending=False)
-            
             for index, row in df.iterrows():
                 c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 1.5, 1])
                 
@@ -621,18 +662,56 @@ def team_leader_view():
                 
                 st.markdown("<hr style='margin: 5px 0; opacity: 0.2;'>", unsafe_allow_html=True)
         else:
-            st.info("No active tasks found.")
+            st.info("No active tasks found in this date range.")
             
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- FTR/OTD Bottom Chart ---
-    with st.container():
-        st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
-        if not df.empty:
-            st.plotly_chart(get_ftr_otd_chart(df), use_container_width=True)
-        else:
-            st.info("Not enough data for FTR/OTD.")
-        st.markdown('</div>', unsafe_allow_html=True)
+    # --- TEAM MEMBERS & PERFORMANCE ROW (RESTORED) ---
+    c_team, c_perf = st.columns([1, 1])
+    
+    with c_team:
+        with st.container():
+            st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
+            st.markdown("### Team Members")
+            
+            # Aggregate stats per user from df
+            if not df.empty:
+                # Get unique members
+                members = df['name_activity_pilot'].unique()
+                for member in members:
+                    # Filter for specific member
+                    m_tasks = df[df['name_activity_pilot'] == member]
+                    count = len(m_tasks)
+                    # Simple performance metric logic (e.g. % completed)
+                    completed = len(m_tasks[m_tasks['status'] == 'Completed'])
+                    perf_score = int((completed / count * 100)) if count > 0 else 0
+                    
+                    role = "Team Member" # Default
+                    
+                    st.markdown(f"""
+                    <div class="team-row">
+                        <div class="team-avatar">👤</div>
+                        <div class="team-info">
+                            <div class="team-name">{member}</div>
+                            <div class="team-role">{role}</div>
+                        </div>
+                        <div class="team-stat">{count} Tasks</div>
+                        <div style="margin-left:10px; color:green; font-weight:bold;">{perf_score}% Done</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No team data available.")
+                
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    with c_perf:
+        with st.container():
+            st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
+            if not df.empty:
+                st.plotly_chart(get_ftr_otd_chart(df), use_container_width=True)
+            else:
+                st.info("Not enough data for FTR/OTD.")
+            st.markdown('</div>', unsafe_allow_html=True)
 
 
 # --- TEAM MEMBER VIEW (Kanban Restored) ---
