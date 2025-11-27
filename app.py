@@ -1,4 +1,4 @@
-# streamlit_kpi_clean_no_rerun.py
+# streamlit_kpi_layout_update.py
 import streamlit as st
 import pandas as pd
 import sqlite3
@@ -210,7 +210,6 @@ def login_page():
                 st.session_state['role'] = USERS[username]['role']
                 st.session_state['name'] = USERS[username]['name']
                 init_session_defaults()
-                # do NOT call experimental_rerun(); Streamlit reruns automatically after button interaction
                 return
             else:
                 st.error("Invalid credentials. Demo: leader/123, member1/123")
@@ -371,15 +370,16 @@ def task_form(mode="create", task_id=None, default_data=None, key_prefix="form")
                 st.session_state['edit_mode'] = False
                 st.session_state['edit_task_id'] = None
                 st.session_state['edit_default'] = None
-                # no explicit rerun; next widget interaction will refresh
 
 # ---------- VIEWS ----------
 def team_leader_view():
     df = get_all_tasks()
-    left, right = st.columns([3,1])
-    with left:
+
+    # header + actions
+    left_h, right_h = st.columns([3,1])
+    with left_h:
         st.markdown("<div class='card'><h2 style='margin:0'>Dashboard</h2></div>", unsafe_allow_html=True)
-    with right:
+    with right_h:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
         uploaded = st.file_uploader("Import CSV", type=['csv'], key="imp_uploader")
         if uploaded:
@@ -392,13 +392,7 @@ def team_leader_view():
             st.session_state['edit_mode'] = False
         st.markdown("</div>", unsafe_allow_html=True)
 
-    if st.session_state.get('show_form', False) and not st.session_state.get('edit_mode', False):
-        with st.container():
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
-            task_form(mode="create", key_prefix="create")
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    st.write("")
+    # top metrics
     m1, m2, m3, m4 = st.columns(4)
     total = len(df) if not df.empty else 0
     inprogress = len(df[df['status']=='Inprogress']) if not df.empty else 0
@@ -409,6 +403,7 @@ def team_leader_view():
     m3.markdown(metric_html("On Hold", hold), unsafe_allow_html=True)
     m4.markdown(metric_html("Delivered", done), unsafe_allow_html=True)
 
+    # analytics row
     chart_col, donut_col = st.columns([2,1])
     with chart_col:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
@@ -426,62 +421,68 @@ def team_leader_view():
             st.info("No data.")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown("<div class='task-header'>Active Tasks</div>", unsafe_allow_html=True)
-    colf1, colf2, colf3 = st.columns([2,2,1])
-    with colf1:
-        d_from = st.date_input("From", value=date.today()-timedelta(days=90), key="filter_from")
-    with colf2:
-        d_to = st.date_input("To", value=date.today()+timedelta(days=30), key="filter_to")
-    with colf3:
-        prio = st.selectbox("Priority", ["All","High","Medium","Low"], index=0)
-    st.write("")
+    # MAIN: two-column layout now — left: Active Tasks summary; right: Team Members + OTD/FTR
+    left_col, right_col = st.columns([2,1])
 
-    df_display = df.copy() if not df.empty else pd.DataFrame()
-    if not df_display.empty and 'start_date' in df_display.columns:
-        df_display['start_date'] = pd.to_datetime(df_display['start_date'], dayfirst=True, errors='coerce').dt.date
-        df_display = df_display[(df_display['start_date'] >= d_from) & (df_display['start_date'] <= d_to)]
+    # LEFT: Active Tasks summary (filters + list)
+    with left_col:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.markdown("<div class='task-header'>Active Tasks</div>", unsafe_allow_html=True)
+        colf1, colf2, colf3 = st.columns([2,2,1])
+        with colf1:
+            d_from = st.date_input("From", value=date.today()-timedelta(days=90), key="filter_from")
+        with colf2:
+            d_to = st.date_input("To", value=date.today()+timedelta(days=30), key="filter_to")
+        with colf3:
+            prio = st.selectbox("Priority", ["All","High","Medium","Low"], index=0)
+        st.write("")
 
-    if df_display.empty:
-        st.info("No tasks in this date range.")
-    else:
-        for _, row in df_display.iterrows():
-            cols = st.columns([3,2,2,1.2,1])
-            with cols[0]:
-                st.markdown(f"**{row.get('task_name','-')}**")
-                st.caption(row.get('description_of_activity',''))
-            with cols[1]:
-                st.markdown(f"<small style='color:gray'>{row.get('name_activity_pilot','-')}</small>", unsafe_allow_html=True)
-            with cols[2]:
-                st.markdown(f"Due: {row.get('commitment_date_to_customer','-')}")
-            with cols[3]:
-                status_label = row.get('status','-')
-                badge_class = 'badge-completed' if status_label=='Completed' else 'badge-inprogress' if status_label=='Inprogress' else 'badge-hold'
-                st.markdown(f"<span class='badge {badge_class}'>{status_label}</span>", unsafe_allow_html=True)
-            with cols[4]:
-                if st.button("Edit", key=f"edit_{row['id']}"):
-                    safe = {}
-                    for k, v in row.to_dict().items():
-                        if pd.isna(v):
-                            safe[k] = None
-                        else:
-                            safe[k] = str(v)
-                    st.session_state['show_form'] = True
-                    st.session_state['edit_mode'] = True
-                    st.session_state['edit_task_id'] = row['id']
-                    st.session_state['edit_default'] = safe
+        df_display = df.copy() if not df.empty else pd.DataFrame()
+        if not df_display.empty and 'start_date' in df_display.columns:
+            df_display['start_date'] = pd.to_datetime(df_display['start_date'], dayfirst=True, errors='coerce').dt.date
+            df_display = df_display[(df_display['start_date'] >= d_from) & (df_display['start_date'] <= d_to)]
 
-            if st.session_state.get('edit_mode') and st.session_state.get('edit_task_id') == row['id']:
-                with st.expander("Edit Task", expanded=True):
-                    task_form(mode="edit", task_id=row['id'], default_data=st.session_state.get('edit_default', {}), key_prefix=f"edit_{row['id']}")
+        if df_display.empty:
+            st.info("No tasks in this date range.")
+        else:
+            # Show a compact summary row for each task; edit expander appears inline
+            for _, row in df_display.iterrows():
+                cols = st.columns([3,2,2,1.2,1])
+                with cols[0]:
+                    st.markdown(f"**{row.get('task_name','-')}**")
+                    st.caption(row.get('description_of_activity',''))
+                with cols[1]:
+                    st.markdown(f"<small style='color:gray'>{row.get('name_activity_pilot','-')}</small>", unsafe_allow_html=True)
+                with cols[2]:
+                    st.markdown(f"Due: {row.get('commitment_date_to_customer','-')}")
+                with cols[3]:
+                    status_label = row.get('status','-')
+                    badge_class = 'badge-completed' if status_label=='Completed' else 'badge-inprogress' if status_label=='Inprogress' else 'badge-hold'
+                    st.markdown(f"<span class='badge {badge_class}'>{status_label}</span>", unsafe_allow_html=True)
+                with cols[4]:
+                    if st.button("Edit", key=f"edit_{row['id']}"):
+                        safe = {}
+                        for k, v in row.to_dict().items():
+                            if pd.isna(v):
+                                safe[k] = None
+                            else:
+                                safe[k] = str(v)
+                        st.session_state['show_form'] = True
+                        st.session_state['edit_mode'] = True
+                        st.session_state['edit_task_id'] = row['id']
+                        st.session_state['edit_default'] = safe
 
-            st.markdown("---")
+                if st.session_state.get('edit_mode') and st.session_state.get('edit_task_id') == row['id']:
+                    with st.expander("Edit Task", expanded=True):
+                        task_form(mode="edit", task_id=row['id'], default_data=st.session_state.get('edit_default', {}), key_prefix=f"edit_{row['id']}")
+                st.markdown("---")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    lower_left, lower_right = st.columns([1.5,1])
-    with lower_left:
-        st.markdown("<div class='card'><h4 style='margin:6px 0'>Team Members</h4>", unsafe_allow_html=True)
+    # RIGHT: Team Members + OTD/FTR stacked
+    with right_col:
+        # Team Members card
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.markdown("<h4 style='margin:6px 0'>Team Members</h4>", unsafe_allow_html=True)
         if not df.empty:
             members = df['name_activity_pilot'].fillna('Unassigned').unique()
             for m in members:
@@ -493,12 +494,14 @@ def team_leader_view():
         else:
             st.write("No members yet.")
         st.markdown("</div>", unsafe_allow_html=True)
-    with lower_right:
-        st.markdown("<div class='card'><h4 style='margin:6px 0'>Performance</h4>", unsafe_allow_html=True)
+
+        # OTD / FTR chart card
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.markdown("<h4 style='margin:6px 0'>OTD & FTR</h4>", unsafe_allow_html=True)
         if not df.empty:
             st.plotly_chart(get_ftr_otd_chart(df), use_container_width=True)
         else:
-            st.info("No performance data")
+            st.info("No performance data.")
         st.markdown("</div>", unsafe_allow_html=True)
 
 def team_member_view():
