@@ -1,4 +1,4 @@
-# streamlit_kpi_clean.py
+# streamlit_kpi_clean_no_rerun.py
 import streamlit as st
 import pandas as pd
 import sqlite3
@@ -10,13 +10,12 @@ import plotly.graph_objects as go
 # ---------- CONFIG ----------
 st.set_page_config(page_title="KPI Management System", layout="wide", page_icon="📊")
 
-# ---------- LIGHT CSS (keep it minimal to avoid many nested visual boxes) ----------
+# ---------- LIGHT CSS ----------
 st.markdown(
     """
     <style>
     .stApp { background-color: #f6f7fb; }
     .main .block-container { padding-top: 1rem; padding-bottom: 1.2rem; }
-    /* Make primary blocks look like cards but avoid over-targeting */
     .card {
         background: #ffffff;
         border-radius: 10px;
@@ -76,7 +75,6 @@ def add_task(data, task_id=None):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
-    # compute OTD safe
     otd_val = "N/A"
     try:
         if data.get("actual_delivery_date") and data.get("commitment_date_to_customer"):
@@ -160,7 +158,6 @@ def import_data_from_csv(file):
             df['id'] = [str(uuid.uuid4())[:8] for _ in range(len(df))]
         else:
             df['id'] = df['id'].apply(lambda x: str(uuid.uuid4())[:8] if pd.isna(x) or x == '' else x)
-        # ensure columns exist
         required_cols = [
             "name_activity_pilot", "task_name", "date_of_receipt", "actual_delivery_date",
             "commitment_date_to_customer", "status", "ftr_customer", "reference_part_number",
@@ -194,7 +191,6 @@ USERS = {
 }
 
 def init_session_defaults():
-    # safe defaults used every time someone logs in
     st.session_state.setdefault('show_form', False)
     st.session_state.setdefault('edit_mode', False)
     st.session_state.setdefault('edit_task_id', None)
@@ -214,12 +210,12 @@ def login_page():
                 st.session_state['role'] = USERS[username]['role']
                 st.session_state['name'] = USERS[username]['name']
                 init_session_defaults()
-                # rerun to show dashboard
-                st.experimental_rerun()
+                # do NOT call experimental_rerun(); Streamlit reruns automatically after button interaction
+                return
             else:
                 st.error("Invalid credentials. Demo: leader/123, member1/123")
 
-# ---------- UI helpers (charts, metric) ----------
+# ---------- UI helpers ----------
 def metric_html(label, value):
     return f"""
     <div class="card">
@@ -278,14 +274,13 @@ def get_ftr_otd_chart(df):
     fig.update_layout(barmode='group', height=300, margin=dict(l=0,r=0,t=30,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
     return fig
 
-# ---------- Form (create/edit) ----------
+# ---------- Form ----------
 def parse_date_like(d):
     if d is None:
         return None
     if isinstance(d, date):
         return d
     if isinstance(d, str) and d.strip() != '':
-        # try ISO first then dayfirst
         try:
             return datetime.strptime(d.split(" ")[0], "%Y-%m-%d").date()
         except:
@@ -296,13 +291,11 @@ def parse_date_like(d):
     return None
 
 def task_form(mode="create", task_id=None, default_data=None, key_prefix="form"):
-    # default_data must contain only serializable simple values (strings/dates/None)
     if default_data is None:
         default_data = {}
     title = "Create Task" if mode=="create" else "Edit Task"
     st.markdown(f"#### {title}")
 
-    # safe parse helper
     def safe_val(k, fallback=""):
         v = default_data.get(k)
         if v is None: return fallback
@@ -310,7 +303,6 @@ def task_form(mode="create", task_id=None, default_data=None, key_prefix="form")
 
     with st.form(key=f"{key_prefix}_{task_id or 'new'}"):
         col1, col2, col3 = st.columns(3)
-        # pilots list
         pilots = [u['name'] for k,u in USERS.items() if u['role']=="Team Member"]
         with col1:
             task_name = st.text_input("Task Name", value=safe_val("task_name",""))
@@ -340,7 +332,6 @@ def task_form(mode="create", task_id=None, default_data=None, key_prefix="form")
             customer_manager = st.text_input("Customer Manager", value=safe_val("customer_manager_name",""))
             remarks = st.text_area("Remarks", value=safe_val("customer_remarks",""))
 
-        # compute OTD display
         otd_display = "N/A"
         try:
             if comm_date and actual_date:
@@ -376,18 +367,15 @@ def task_form(mode="create", task_id=None, default_data=None, key_prefix="form")
                 }
                 add_task(payload, task_id=task_id)
                 st.success("Saved.")
-                # reset edit flags
                 st.session_state['show_form'] = False
                 st.session_state['edit_mode'] = False
                 st.session_state['edit_task_id'] = None
                 st.session_state['edit_default'] = None
-                # reflect changes immediately
-                st.experimental_rerun()
+                # no explicit rerun; next widget interaction will refresh
 
 # ---------- VIEWS ----------
 def team_leader_view():
     df = get_all_tasks()
-    # top row: title + actions
     left, right = st.columns([3,1])
     with left:
         st.markdown("<div class='card'><h2 style='margin:0'>Dashboard</h2></div>", unsafe_allow_html=True)
@@ -398,22 +386,19 @@ def team_leader_view():
             ok = import_data_from_csv(uploaded)
             if ok:
                 st.success("Imported CSV.")
-                st.experimental_rerun()
         st.download_button("Export CSV", data=(df.to_csv(index=False).encode('utf-8') if not df.empty else ""), file_name="kpi_tasks.csv", mime="text/csv")
         if st.button("➕ New Task"):
             st.session_state['show_form'] = True
             st.session_state['edit_mode'] = False
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # show create form (simple card) if requested
     if st.session_state.get('show_form', False) and not st.session_state.get('edit_mode', False):
         with st.container():
             st.markdown("<div class='card'>", unsafe_allow_html=True)
             task_form(mode="create", key_prefix="create")
             st.markdown("</div>", unsafe_allow_html=True)
 
-    # metrics row
-    st.write("")  # spacer
+    st.write("")
     m1, m2, m3, m4 = st.columns(4)
     total = len(df) if not df.empty else 0
     inprogress = len(df[df['status']=='Inprogress']) if not df.empty else 0
@@ -424,7 +409,6 @@ def team_leader_view():
     m3.markdown(metric_html("On Hold", hold), unsafe_allow_html=True)
     m4.markdown(metric_html("Delivered", done), unsafe_allow_html=True)
 
-    # analytics / donut
     chart_col, donut_col = st.columns([2,1])
     with chart_col:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
@@ -442,10 +426,8 @@ def team_leader_view():
             st.info("No data.")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Filter and Task list
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.markdown("<div class='task-header'>Active Tasks</div>", unsafe_allow_html=True)
-    # simple date filter
     colf1, colf2, colf3 = st.columns([2,2,1])
     with colf1:
         d_from = st.date_input("From", value=date.today()-timedelta(days=90), key="filter_from")
@@ -453,7 +435,7 @@ def team_leader_view():
         d_to = st.date_input("To", value=date.today()+timedelta(days=30), key="filter_to")
     with colf3:
         prio = st.selectbox("Priority", ["All","High","Medium","Low"], index=0)
-    st.write("")  # small gap
+    st.write("")
 
     df_display = df.copy() if not df.empty else pd.DataFrame()
     if not df_display.empty and 'start_date' in df_display.columns:
@@ -463,9 +445,7 @@ def team_leader_view():
     if df_display.empty:
         st.info("No tasks in this date range.")
     else:
-        # Render each row simply (no nested containers), with an expander for edit inline
         for _, row in df_display.iterrows():
-            # row bar
             cols = st.columns([3,2,2,1.2,1])
             with cols[0]:
                 st.markdown(f"**{row.get('task_name','-')}**")
@@ -475,10 +455,11 @@ def team_leader_view():
             with cols[2]:
                 st.markdown(f"Due: {row.get('commitment_date_to_customer','-')}")
             with cols[3]:
-                st.markdown(f"<span class='badge {'badge-completed' if row.get('status')=='Completed' else 'badge-inprogress' if row.get('status')=='Inprogress' else 'badge-hold'}'>{row.get('status','-')}</span>", unsafe_allow_html=True)
+                status_label = row.get('status','-')
+                badge_class = 'badge-completed' if status_label=='Completed' else 'badge-inprogress' if status_label=='Inprogress' else 'badge-hold'
+                st.markdown(f"<span class='badge {badge_class}'>{status_label}</span>", unsafe_allow_html=True)
             with cols[4]:
                 if st.button("Edit", key=f"edit_{row['id']}"):
-                    # store safe defaults (convert Timestamps -> ISO strings)
                     safe = {}
                     for k, v in row.to_dict().items():
                         if pd.isna(v):
@@ -489,19 +470,15 @@ def team_leader_view():
                     st.session_state['edit_mode'] = True
                     st.session_state['edit_task_id'] = row['id']
                     st.session_state['edit_default'] = safe
-                    # do not call rerun here (Streamlit widget action triggers rerun)
 
-            # if this row is being edited show an expander directly below it (no extra containers)
             if st.session_state.get('edit_mode') and st.session_state.get('edit_task_id') == row['id']:
                 with st.expander("Edit Task", expanded=True):
-                    # default data stored are strings (ISO-like). task_form will parse them.
                     task_form(mode="edit", task_id=row['id'], default_data=st.session_state.get('edit_default', {}), key_prefix=f"edit_{row['id']}")
 
             st.markdown("---")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # bottom: team members + performance chart
     lower_left, lower_right = st.columns([1.5,1])
     with lower_left:
         st.markdown("<div class='card'><h4 style='margin:6px 0'>Team Members</h4>", unsafe_allow_html=True)
@@ -532,7 +509,6 @@ def team_member_view():
     if my_tasks.empty:
         st.info("You have no tasks assigned.")
         return
-    # simple columns for statuses
     statuses = ["Hold","Inprogress","Completed","Cancelled"]
     cols = st.columns(4)
     for i, s in enumerate(statuses):
@@ -549,7 +525,6 @@ def team_member_view():
                         if st.form_submit_button("Save"):
                             update_task_status(r['id'], new_status, actual_date)
                             st.success("Updated.")
-                            st.experimental_rerun()
 
 # ---------- MAIN ----------
 def main():
@@ -561,22 +536,18 @@ def main():
         login_page()
         return
 
-    # Sidebar - show user + logout
     with st.sidebar:
         st.image("https://api.dicebear.com/7.x/avataaars/svg?seed=Felix", width=80)
         st.markdown(f"**{st.session_state.get('name','')}**")
         st.markdown(f"Role: {st.session_state.get('role','')}")
         st.markdown("---")
         if st.button("Logout"):
-            # clear keys that can break later
             keys_to_remove = ['logged_in','user','role','name','show_form','edit_mode','edit_task_id','edit_default']
             for k in keys_to_remove:
                 if k in st.session_state:
                     del st.session_state[k]
-            # safe full rerun so login page appears
-            st.experimental_rerun()
+            return
 
-    # route based on role
     role = st.session_state.get('role','')
     if role == "Team Leader":
         team_leader_view()
