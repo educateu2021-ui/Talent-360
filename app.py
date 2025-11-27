@@ -25,25 +25,25 @@ st.markdown("""
     }
 
     /* AUTOMATIC CARD STYLING FOR ST.CONTAINER(BORDER=TRUE) */
-    /* This targets the new Streamlit containers to make them look like cards */
+    /* Forces white background on containers */
     [data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #FFFFFF; /* EXPLICIT WHITE */
+        background-color: #FFFFFF !important; /* EXPLICIT WHITE */
         border-radius: 12px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         border: 1px solid #e1e4e8;
         padding: 20px;
         margin-bottom: 20px;
         height: 100%;
     }
     
-    /* Remove default background from the inner block so our white background shows */
+    /* Ensure inner div is transparent so white shows through */
     [data-testid="stVerticalBlockBorderWrapper"] > div {
-        background-color: transparent;
+        background-color: transparent !important;
     }
 
     /* METRIC CARDS */
     .metric-card {
-        background-color: #FFFFFF; /* EXPLICIT WHITE */
+        background-color: #FFFFFF !important;
         padding: 20px;
         border-radius: 12px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.02);
@@ -130,6 +130,11 @@ st.markdown("""
         margin-bottom: 10px;
         border-left: 4px solid #3498db;
     }
+    
+    /* Button tweaks */
+    [data-testid="stFileUploader"] {
+        padding-top: 0px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -172,8 +177,12 @@ def create_demo_data():
     """Generates 100 random demo data entries if database is empty"""
     conn = sqlite3.connect('kpi_data.db')
     c = conn.cursor()
-    c.execute("SELECT count(*) FROM tasks_v2")
-    count = c.fetchone()[0]
+    # Check if table exists first to avoid error
+    try:
+        c.execute("SELECT count(*) FROM tasks_v2")
+        count = c.fetchone()[0]
+    except:
+        count = 0
     
     if count == 0:
         pilots = ["Bob (Member)", "Charlie (Member)"]
@@ -540,12 +549,25 @@ def team_leader_view():
     raw_df = get_all_tasks()
     
     # 1. HEADER & ACTIONS
-    c1, c2 = st.columns([6, 2])
+    c1, c2 = st.columns([5, 3])
     with c1: st.title("Dashboard")
     with c2: 
-        if st.button("✚ New Job", type="primary", use_container_width=True):
-             st.session_state['show_form'] = True
-             st.session_state['edit_mode'] = False
+        # Action Buttons Layout: Import | Export | New
+        ac1, ac2, ac3 = st.columns([1, 1, 1])
+        with ac1:
+            uploaded_file = st.file_uploader("Import", type=['csv'], label_visibility="collapsed")
+            if uploaded_file:
+                if import_data_from_csv(uploaded_file):
+                    st.success("Done!")
+                    st.rerun()
+        with ac2:
+            if not raw_df.empty:
+                csv = raw_df.to_csv(index=False).encode('utf-8')
+                st.download_button("Export", csv, "kpi_tasks.csv", "text/csv", use_container_width=True)
+        with ac3:
+            if st.button("✚ New", type="primary", use_container_width=True):
+                 st.session_state['show_form'] = True
+                 st.session_state['edit_mode'] = False
     
     # Form Overlay
     if st.session_state.get('show_form', False):
