@@ -295,11 +295,49 @@ def update_task_status(task_id, new_status, new_actual_date=None):
     conn.commit()
     conn.close()
 
+# --- IMPROVED IMPORT FUNCTION ---
 def import_data_from_csv(file):
     try:
         df = pd.read_csv(file)
+        
+        # 1. Handle missing ID column or generate IDs
+        if 'id' not in df.columns:
+            # Generate IDs for all rows
+            df['id'] = [str(uuid.uuid4())[:8] for _ in range(len(df))]
+        else:
+            # If ID column exists but some are empty, fill them
+            df['id'] = df['id'].apply(lambda x: str(uuid.uuid4())[:8] if pd.isna(x) or x == '' else x)
+            
+        # 2. Ensure all schema columns exist in DataFrame
+        required_cols = [
+            "name_activity_pilot", "task_name", "date_of_receipt", "actual_delivery_date", 
+            "commitment_date_to_customer", "status", "ftr_customer", "reference_part_number", 
+            "ftr_internal", "otd_internal", "description_of_activity", "activity_type", 
+            "ftr_quality_gate_internal", "date_of_clarity_in_input", "start_date", "otd_customer", 
+            "customer_remarks", "name_quality_gate_referent", "project_lead", "customer_manager_name"
+        ]
+        
+        for col in required_cols:
+            if col not in df.columns:
+                df[col] = None # Fill missing CSV columns with None
+        
+        # 3. Filter DataFrame to match DB schema exactly
+        # Ensure order matches DB schema
+        cols_to_keep = ['id'] + required_cols
+        df = df[cols_to_keep]
+
+        # 4. Upsert (Insert or Replace) Logic
         conn = sqlite3.connect('kpi_data.db')
-        df.to_sql('tasks_v2', conn, if_exists='append', index=False)
+        c = conn.cursor()
+        
+        # We iterate and execute standard SQL for maximum compatibility
+        for index, row in df.iterrows():
+            placeholders = ', '.join(['?'] * len(row))
+            # INSERT OR REPLACE handles both new data (auto-generated IDs) and updates (existing IDs)
+            sql = f"INSERT OR REPLACE INTO tasks_v2 VALUES ({placeholders})"
+            c.execute(sql, tuple(row))
+            
+        conn.commit()
         conn.close()
         return True
     except Exception as e:
