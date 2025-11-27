@@ -24,23 +24,23 @@ st.markdown("""
         padding-bottom: 2rem;
     }
 
-    /* CARD STYLING - FULL WIDTH & HEIGHT */
-    .dashboard-card {
+    /* AUTOMATIC CARD STYLING FOR ST.CONTAINER(BORDER=TRUE) */
+    /* This targets the new Streamlit containers to make them look like cards */
+    [data-testid="stVerticalBlockBorderWrapper"] {
         background-color: white;
-        padding: 20px;
         border-radius: 12px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.03);
-        margin-bottom: 20px;
         border: 1px solid #e1e4e8;
-        height: 100%; /* Try to fill height */
-        min-height: 200px; /* Ensure it doesn't collapse */
+        padding: 20px;
+        margin-bottom: 20px;
+        height: 100%;
     }
     
-    /* SPECIFIC CARD HEIGHTS FOR LAYOUT MATCHING */
-    .chart-card {
-        min-height: 400px;
+    /* Remove default background from the inner block so our white background shows */
+    [data-testid="stVerticalBlockBorderWrapper"] > div {
+        background-color: transparent;
     }
-    
+
     /* METRIC CARDS */
     .metric-card {
         background-color: white;
@@ -51,6 +51,7 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
+        margin-bottom: 10px;
     }
     
     /* TEXT STYLES */
@@ -114,18 +115,6 @@ st.markdown("""
     .badge-inprogress { background-color: #d6eaf8; color: #2874a6; }
     .badge-hold { background-color: #fce4ec; color: #c2185b; }
     
-    /* FILTER BAR */
-    .filter-container {
-        background-color: white;
-        padding: 15px 20px;
-        border-radius: 12px;
-        border: 1px solid #e1e4e8;
-        margin-bottom: 20px;
-        display: flex;
-        align-items: flex-end;
-        gap: 15px;
-    }
-    
     /* KANBAN */
     .kanban-col {
         background-color: #f8f9fa;
@@ -180,35 +169,44 @@ def init_db():
     conn.close()
 
 def create_demo_data():
-    """Generates demo data if database is empty to fix 'half filled' look"""
+    """Generates 100 random demo data entries if database is empty"""
     conn = sqlite3.connect('kpi_data.db')
     c = conn.cursor()
     c.execute("SELECT count(*) FROM tasks_v2")
     count = c.fetchone()[0]
     
     if count == 0:
-        tasks = [
-            ("Design Update", "Bob (Member)", "Inprogress", 5),
-            ("Website Develop", "Charlie (Member)", "Completed", 2),
-            ("App Testing", "Bob (Member)", "Hold", 10),
-            ("Database Setup", "Charlie (Member)", "Completed", 1),
-            ("API Integration", "Bob (Member)", "Inprogress", 8),
-            ("UI Cleanup", "Charlie (Member)", "Completed", 3),
-        ]
+        pilots = ["Bob (Member)", "Charlie (Member)"]
+        statuses = ["Inprogress", "Completed", "Hold", "Cancelled"]
+        task_names = ["Design Update", "Website Develop", "App Testing", "Database Setup", "API Integration", "UI Cleanup", "Backend Refactor", "Security Audit"]
         
         today = date.today()
         
-        for t_name, pilot, status, days_offset in tasks:
-            start = today - timedelta(days=random.randint(5, 30))
-            due = start + timedelta(days=random.randint(5, 15))
-            actual = due - timedelta(days=random.randint(0, 2)) if status == "Completed" else None
+        # Generate 100 records
+        for _ in range(100):
+            t_name = random.choice(task_names)
+            pilot = random.choice(pilots)
+            status = random.choice(statuses)
             
-            otd_int = "Yes" if actual and actual <= due else "N/A"
+            # Randomize dates
+            start = today - timedelta(days=random.randint(1, 60))
+            due = start + timedelta(days=random.randint(5, 20))
+            
+            actual = None
+            if status == "Completed":
+                # 80% chance of being on time
+                if random.random() > 0.2:
+                    actual = due - timedelta(days=random.randint(0, 3))
+                else:
+                    actual = due + timedelta(days=random.randint(1, 5))
+            
+            otd_int = "Yes" if actual and actual <= due else "N/A" if not actual else "NO"
+            ftr_int = "Yes" if random.random() > 0.1 else "NO" # 90% FTR
             
             c.execute('''INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
                 str(uuid.uuid4())[:8], pilot, t_name, start, actual, due, status, 
-                "Yes", f"REF-{random.randint(100,999)}", "Yes", otd_int, 
-                "Demo Task Description", "3d development", "Yes", start, start, 
+                "Yes", f"REF-{random.randint(1000,9999)}", ftr_int, otd_int, 
+                "Demo Task Description generated automatically.", "3d development", "Yes", start, start, 
                 "Yes", "No remarks", "Quality Ref", "Alice (Lead)", "Manager X"
             ))
         conn.commit()
@@ -310,9 +308,9 @@ def login_page():
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1,1.5,1])
     with c2:
-        with st.container():
+        with st.container(border=True):
             st.markdown("""
-            <div style="background-color: white; padding: 40px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center;">
+            <div style="text-align: center;">
                 <h2 style="color: #2c3e50;">KPI System Login</h2>
             </div>
             """, unsafe_allow_html=True)
@@ -570,31 +568,26 @@ def team_leader_view():
     c_left, c_right = st.columns([2, 1])
     
     with c_left:
-        with st.container():
-            st.markdown('<div class="dashboard-card chart-card">', unsafe_allow_html=True)
+        with st.container(border=True):
             if not raw_df.empty:
                 st.plotly_chart(get_analytics_chart(raw_df), use_container_width=True)
             else:
                 st.info("No data available.")
-            st.markdown('</div>', unsafe_allow_html=True)
             
     with c_right:
-        with st.container():
-            st.markdown('<div class="dashboard-card chart-card">', unsafe_allow_html=True)
+        with st.container(border=True):
             st.markdown("##### My Progress")
             st.markdown("<small style='color:grey'>Task completion rate</small>", unsafe_allow_html=True)
             if not raw_df.empty:
                 st.plotly_chart(get_donut_chart(raw_df), use_container_width=True)
             else:
                 st.info("No data.")
-            st.markdown('</div>', unsafe_allow_html=True)
             
     # 4. FILTER BAR & TABLE
     st.markdown("### Active Tasks")
     
-    # Filter Container (Styled like a bar)
-    with st.container():
-        # Using a unified container style for filters
+    # Filter Container
+    with st.container(border=True):
         c_f1, c_f2, c_f3, c_btn = st.columns([1.5, 1.5, 1.5, 1])
         with c_f1: d_from = st.date_input("From:", value=date.today()-timedelta(days=30))
         with c_f2: d_to = st.date_input("To:", value=date.today())
@@ -611,9 +604,7 @@ def team_leader_view():
         df_filtered = df_filtered[(df_filtered['start_date'] >= d_from) & (df_filtered['start_date'] <= d_to)]
 
     # Task List Container
-    with st.container():
-        st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
-        
+    with st.container(border=True):
         # Custom Table Header
         h1, h2, h3, h4, h5 = st.columns([3, 2, 2, 1.5, 1])
         h1.markdown("<div class='task-header'>TASK NAME</div>", unsafe_allow_html=True)
@@ -643,15 +634,12 @@ def team_leader_view():
                 st.markdown("<hr style='margin:0; border-top: 1px solid #f0f0f0;'>", unsafe_allow_html=True)
         else:
             st.info("No active tasks found in this range.")
-            
-        st.markdown('</div>', unsafe_allow_html=True)
 
     # 5. BOTTOM ROW: TEAM & PERFORMANCE
     b_left, b_right = st.columns([1, 1])
     
     with b_left:
-        with st.container():
-            st.markdown('<div class="dashboard-card" style="min-height:350px;">', unsafe_allow_html=True)
+        with st.container(border=True):
             st.markdown("### Team Members")
             st.markdown("<div style='margin-bottom:15px'></div>", unsafe_allow_html=True)
             
@@ -680,16 +668,13 @@ def team_leader_view():
                     """, unsafe_allow_html=True)
             else:
                 st.write("No team data.")
-            st.markdown('</div>', unsafe_allow_html=True)
             
     with b_right:
-        with st.container():
-            st.markdown('<div class="dashboard-card" style="min-height:350px;">', unsafe_allow_html=True)
+        with st.container(border=True):
             if not raw_df.empty:
                 st.plotly_chart(get_ftr_otd_chart(raw_df), use_container_width=True)
             else:
                 st.write("No performance data.")
-            st.markdown('</div>', unsafe_allow_html=True)
 
 def team_member_view():
     st.title(f"Tasks: {st.session_state['name']}")
@@ -709,13 +694,10 @@ def team_member_view():
             if not my_tasks.empty:
                 tasks_in_col = my_tasks[my_tasks['status'] == status]
                 for _, row in tasks_in_col.iterrows():
-                    with st.container():
-                        st.markdown(f"""
-                        <div class='kanban-card' style='border-left: 5px solid {colors[i]}'>
-                            <div style='font-weight:bold; font-size:14px;'>{row['task_name']}</div>
-                            <div style='font-size:12px; color:grey;'>Due: {row['commitment_date_to_customer']}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                    with st.container(border=True):
+                        st.markdown(f"**{row['task_name']}**")
+                        st.caption(f"Due: {row['commitment_date_to_customer']}")
+                        
                         with st.expander("Update"):
                             with st.form(key=f"k_{row['id']}"):
                                 new_s = st.selectbox("Status", statuses, index=statuses.index(status))
