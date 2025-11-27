@@ -27,7 +27,7 @@ st.markdown("""
     /* AUTOMATIC CARD STYLING FOR ST.CONTAINER(BORDER=TRUE) */
     /* This targets the new Streamlit containers to make them look like cards */
     [data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: white;
+        background-color: #FFFFFF; /* EXPLICIT WHITE */
         border-radius: 12px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.03);
         border: 1px solid #e1e4e8;
@@ -43,7 +43,7 @@ st.markdown("""
 
     /* METRIC CARDS */
     .metric-card {
-        background-color: white;
+        background-color: #FFFFFF; /* EXPLICIT WHITE */
         padding: 20px;
         border-radius: 12px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.02);
@@ -352,14 +352,18 @@ def get_analytics_chart(df):
     
     # Ensure date format
     df['start_date'] = pd.to_datetime(df['start_date'], errors='coerce')
+    # Use a format that sorts correctly if using pandas sort, but here we can just use Month string
+    # For a real bar chart, sorting by date is better.
+    df = df.sort_values('start_date')
     df['month'] = df['start_date'].dt.strftime('%b')
     
     # Aggregate counts
-    monthly_counts = df.groupby(['month', 'status']).size().reset_index(name='count')
+    monthly_counts = df.groupby(['month', 'status'], sort=False).size().reset_index(name='count')
     
-    fig = px.area(monthly_counts, x="month", y="count", color="status",
-                  color_discrete_map={"Completed": "#2ecc71", "Inprogress": "#3498db", "Hold": "#e74c3c"},
-                  title="Project Analytics")
+    # Changed to Bar Chart as requested
+    fig = px.bar(monthly_counts, x="month", y="count", color="status",
+                  color_discrete_map={"Completed": "#2ecc71", "Inprogress": "#3498db", "Hold": "#e74c3c", "Cancelled": "#95a5a6"},
+                  title="Project Analytics (Bar Chart)", barmode='group')
     
     fig.update_layout(
         paper_bgcolor='rgba(0,0,0,0)',
