@@ -17,63 +17,71 @@ st.markdown(
     /* Global Background */
     .stApp { background-color: #f8f9fa; }
     
-    /* Card Styles */
-    .card {
-        background: #ffffff;
+    /* TRANSFORM BUTTONS INTO CARDS 
+       This CSS targets the buttons inside the columns to look like cards 
+    */
+    div.stButton > button {
+        height: 220px;              /* Fixed height for uniformity */
+        width: 100%;                /* Full width of the column */
         border-radius: 15px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-        border: 1px solid #f0f0f0;
-        padding: 25px 20px;
-        text-align: center;
-        height: 220px;
+        background-color: #ffffff;
+        border: 1px solid #e5e7eb;
+        color: #1f2937;             /* Dark text */
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        transition: all 0.3s ease;
+        
+        /* Flexbox for centering content vertically */
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        transition: transform 0.2s ease;
+        text-align: center;
+        
+        /* Typography overrides for the button label */
+        font-size: 16px;
+        white-space: pre-wrap;      /* Allows new lines (\n) in button text */
+        line-height: 1.5;
     }
-    .card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 8px 30px rgba(0,0,0,0.1);
-        border-color: #3b82f6;
+
+    /* Hover Effect */
+    div.stButton > button:hover {
+        transform: translateY(-7px);
+        box-shadow: 0 12px 25px rgba(0,0,0,0.1);
+        border-color: #3b82f6;      /* Blue border on hover */
+        color: #3b82f6;             /* Blue text on hover */
+        background-color: #ffffff;
+    }
+
+    /* Active (Click) Effect */
+    div.stButton > button:active {
+        background-color: #f3f4f6;
+        transform: translateY(-2px);
     }
     
-    /* Icon Styling */
-    .icon-box {
-        font-size: 3.5rem;
+    /* Sidebar Profile Image Styling */
+    .profile-container {
+        display: flex;
+        justify-content: center;
         margin-bottom: 15px;
     }
-    
-    /* Typography */
-    .app-title { font-size: 1.1rem; font-weight: 700; color: #1f2937; margin-bottom: 8px; }
-    .app-desc { font-size: 0.85rem; color: #6b7280; line-height: 1.4; }
-    
-    /* Button Tweaks to blend with cards */
-    div.stButton > button {
-        border-radius: 10px;
-        font-weight: 600;
-        border: none;
-        transition: all 0.2s;
-    }
-    
-    /* Sidebar Profile */
     .profile-img {
-        border-radius: 50%;
-        border: 3px solid #3b82f6;
-        padding: 3px;
+        width: 100px; 
+        height: 100px; 
+        object-fit: cover; 
+        border-radius: 50%; 
+        border: 3px solid #e5e7eb;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# ---------- DATABASE & UTILS (No Changes to Logic) ----------
-DB_FILE = "portal_data_v2.db"
+# ---------- DATABASE & UTILS (Logic Unchanged) ----------
+DB_FILE = "portal_data_v3.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # 1. KPI TABLE
     c.execute('''CREATE TABLE IF NOT EXISTS tasks_v2 (
         id TEXT PRIMARY KEY, name_activity_pilot TEXT, task_name TEXT, date_of_receipt TEXT,
         actual_delivery_date TEXT, commitment_date_to_customer TEXT, status TEXT,
@@ -82,21 +90,17 @@ def init_db():
         date_of_clarity_in_input TEXT, start_date TEXT, otd_customer TEXT, customer_remarks TEXT,
         name_quality_gate_referent TEXT, project_lead TEXT, customer_manager_name TEXT
     )''')
-    # 2. TRAINING REPO
     c.execute('''CREATE TABLE IF NOT EXISTS training_repo (
         id TEXT PRIMARY KEY, title TEXT, description TEXT, link TEXT, 
         role_target TEXT, mandatory INTEGER, created_by TEXT
     )''')
-    # 3. TRAINING PROGRESS
     c.execute('''CREATE TABLE IF NOT EXISTS training_progress (
         user_name TEXT, training_id TEXT, status TEXT, 
         last_updated TEXT, PRIMARY KEY (user_name, training_id)
     )''')
-    # 4. ONBOARDING TASKS
     c.execute('''CREATE TABLE IF NOT EXISTS onboarding_tasks (
         id TEXT PRIMARY KEY, task_name TEXT, description TEXT
     )''')
-    # 5. ONBOARDING PROGRESS
     c.execute('''CREATE TABLE IF NOT EXISTS onboarding_progress (
         user_name TEXT, task_id TEXT, is_completed INTEGER,
         PRIMARY KEY (user_name, task_id)
@@ -197,7 +201,6 @@ def toggle_onboarding(user_name, task_id, checked):
     conn.close()
 
 # ---------- AUTH & SESSION ----------
-# Professional Profile Images (Unsplash URLs)
 USERS = {
     "leader": {
         "password": "123", 
@@ -253,62 +256,38 @@ def app_home():
     # 4 Columns Layout
     c1, c2, c3, c4 = st.columns(4)
     
-    # Module 1: KPI
+    # NOTE: The "\n" in the button labels are handled by the 'white-space: pre-wrap' CSS above.
+    # This makes the button serve as the entire card.
+    
     with c1:
-        st.markdown("""
-        <div class='card'>
-            <div class='icon-box'>📊</div>
-            <div class='app-title'>KPI System</div>
-            <div class='app-desc'>Track OTD, FTR and project delivery status.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Launch KPI ➔", use_container_width=True, type="primary", key="btn_kpi"):
+        # Module 1: KPI
+        # We use a large emoji/icon and text inside the button label
+        if st.button("📊\n\nKPI System\n\nTrack Projects & OTD", use_container_width=True, key="btn_kpi"):
             st.session_state['current_app'] = 'KPI'
             st.rerun()
 
-    # Module 2: Training
     with c2:
-        st.markdown("""
-        <div class='card'>
-            <div class='icon-box'>🎓</div>
-            <div class='app-title'>Training Hub</div>
-            <div class='app-desc'>Access courses and track your learning path.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Launch Training ➔", use_container_width=True, key="btn_train"):
+        # Module 2: Training
+        if st.button("🎓\n\nTraining Hub\n\nUpskill & Learn", use_container_width=True, key="btn_train"):
             st.session_state['current_app'] = 'TRAINING'
             st.rerun()
 
-    # Module 3: Onboarding
     with c3:
-        st.markdown("""
-        <div class='card'>
-            <div class='icon-box'>🚀</div>
-            <div class='app-title'>Onboarding</div>
-            <div class='app-desc'>New hire checklists and essential docs.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Launch Setup ➔", use_container_width=True, key="btn_onb"):
+        # Module 3: Onboarding
+        if st.button("🚀\n\nOnboarding\n\nNew Hire Setup", use_container_width=True, key="btn_onb"):
             st.session_state['current_app'] = 'ONBOARDING'
             st.rerun()
 
-    # Module 4: Skill Radar (New Feature)
     with c4:
-        st.markdown("""
-        <div class='card' style='border: 1px dashed #cbd5e1; background:#fbfcfe;'>
-            <div class='icon-box' style='opacity:0.6'>🕸️</div>
-            <div class='app-title'>Skill Radar</div>
-            <div class='app-desc'>Visualize team competency matrix.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("View Radar ➔", use_container_width=True, key="btn_radar"):
-            st.toast("🚧 This feature is currently under construction!", icon="👷")
-            time.sleep(1)
+        # Module 4: Skill Radar (Under Construction)
+        if st.button("🕸️\n\nSkill Radar\n\nCompetency Matrix", use_container_width=True, key="btn_radar"):
+            st.toast("🚧 Skill Radar is currently under construction!", icon="👷")
+            time.sleep(1) # Small delay for visual feedback
 
 # ---------- APP: KPI SYSTEM ----------
 def app_kpi():
     st.markdown("### 📊 KPI Management System")
-    if st.button("← Dashboard", type="secondary"):
+    if st.button("← Back to Dashboard"):
         st.session_state['current_app'] = 'HOME'
         st.rerun()
     st.markdown("---")
@@ -357,7 +336,7 @@ def app_kpi():
 # ---------- APP: TRAINING TRACKER ----------
 def app_training():
     st.markdown("### 🎓 Training Tracker")
-    if st.button("← Dashboard", type="secondary"):
+    if st.button("← Back to Dashboard"):
         st.session_state['current_app'] = 'HOME'
         st.rerun()
     st.markdown("---")
@@ -390,7 +369,7 @@ def app_training():
             for idx, row in df.iterrows():
                 with cols[idx % 3]:
                     st.markdown(f"""
-                    <div style='background:white; padding:15px; border-radius:10px; border:1px solid #e5e7eb; height:100%;'>
+                    <div style='background:white; padding:15px; border-radius:10px; border:1px solid #e5e7eb; height:100%; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
                         <div style='font-weight:bold; color:#1f2937;'>{row['title']}</div>
                         <div style='font-size:0.8rem; color:#6b7280; margin-bottom:10px;'>{row['description']}</div>
                         <a href='{row['link']}' target='_blank' style='color:#3b82f6; text-decoration:none; font-size:0.9rem;'>▶ Access Content</a>
@@ -409,7 +388,7 @@ def app_training():
 # ---------- APP: ONBOARDING ----------
 def app_onboarding():
     st.markdown("### 🚀 Onboarding Hub")
-    if st.button("← Dashboard", type="secondary"):
+    if st.button("← Back to Dashboard"):
         st.session_state['current_app'] = 'HOME'
         st.rerun()
     st.markdown("---")
@@ -434,7 +413,7 @@ def app_onboarding():
         else:
             comp = df['is_completed'].sum(); total = len(df)
             st.progress(comp/total, text=f"{int(comp)}/{total} Steps Completed")
-            st.markdown("<div style='background:white; padding:20px; border-radius:10px;'>", unsafe_allow_html=True)
+            st.markdown("<div style='background:white; padding:20px; border-radius:10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>", unsafe_allow_html=True)
             for _, row in df.iterrows():
                 is_done = bool(row['is_completed'])
                 c1, c2 = st.columns([0.05, 0.95])
@@ -457,12 +436,12 @@ def main():
 
     if st.session_state['logged_in']:
         with st.sidebar:
-            # Professional Profile Image
+            # Professional Profile Image (Rounded)
             img_url = st.session_state.get('img', '')
             if img_url:
                 st.markdown(f"""
-                <div style='display:flex; justify-content:center; margin-bottom:15px;'>
-                    <img src='{img_url}' style='width:100px; height:100px; object-fit:cover; border-radius:50%; border:3px solid #e5e7eb;'>
+                <div class="profile-container">
+                    <img src='{img_url}' class="profile-img">
                 </div>
                 """, unsafe_allow_html=True)
             
