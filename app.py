@@ -46,24 +46,19 @@ st.markdown(
     .js-plotly-plot .plotly .main-svg {
         background-color: rgba(0,0,0,0) !important;
     }
-    
-    /* Status Badges */
-    .status-ok { color: #10b981; font-weight: bold; }
-    .status-pending { color: #f59e0b; font-weight: bold; }
-    .status-block { color: #ef4444; font-weight: bold; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # ---------- DATABASE ----------
-DB_FILE = "portal_data_final_v10.db"
+DB_FILE = "portal_data_final.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
-    # 1. KPI Table
+    # KPI Table
     c.execute('''CREATE TABLE IF NOT EXISTS tasks_v2 (
         id TEXT PRIMARY KEY, name_activity_pilot TEXT, task_name TEXT, date_of_receipt TEXT,
         actual_delivery_date TEXT, commitment_date_to_customer TEXT, status TEXT,
@@ -73,7 +68,7 @@ def init_db():
         name_quality_gate_referent TEXT, project_lead TEXT, customer_manager_name TEXT
     )''')
     
-    # 2. Training Tables
+    # Training Tables
     c.execute('''CREATE TABLE IF NOT EXISTS training_repo (
         id TEXT PRIMARY KEY, title TEXT, description TEXT, link TEXT, 
         role_target TEXT, mandatory INTEGER, created_by TEXT
@@ -83,33 +78,21 @@ def init_db():
         last_updated TEXT, PRIMARY KEY (user_name, training_id)
     )''')
     
-    # 3. New Onboarding Table
-    c.execute('''CREATE TABLE IF NOT EXISTS onboarding_details (
-        username TEXT PRIMARY KEY,
-        fullname TEXT,
-        emp_id TEXT,
-        tid TEXT,
-        location TEXT,
-        work_mode TEXT,
-        hr_policy_briefing INTEGER,
-        it_system_setup INTEGER,
-        tid_active INTEGER,
-        team_centre_training INTEGER,
-        agt_access INTEGER,
-        ext_mail_id INTEGER,
-        rdp_access INTEGER,
-        avd_access INTEGER,
-        teamcenter_access INTEGER,
-        blocking_point TEXT,
-        ticket_raised TEXT
+    # Onboarding Tables
+    c.execute('''CREATE TABLE IF NOT EXISTS onboarding_tasks (
+        id TEXT PRIMARY KEY, task_name TEXT, description TEXT
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS onboarding_progress (
+        user_name TEXT, task_id TEXT, is_completed INTEGER,
+        PRIMARY KEY (user_name, task_id)
     )''')
     
     conn.commit()
     conn.close()
 
-# ---------- UTILS & HELPERS ----------
+# ---------- UTILS & LOGIC ----------
 
-# --- KPI HELPERS ---
+# --- KPI Logic ---
 def get_kpi_data():
     conn = sqlite3.connect(DB_FILE)
     try: df = pd.read_sql_query("SELECT * FROM tasks_v2", conn)
@@ -120,6 +103,8 @@ def get_kpi_data():
 def save_kpi_task(data, task_id=None):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    
+    # Robust OTD Calculation
     otd_val = "N/A"
     try:
         ad = data.get("actual_delivery_date")
@@ -129,15 +114,20 @@ def save_kpi_task(data, task_id=None):
             c_dt = pd.to_datetime(cd, dayfirst=True, errors='coerce')
             if not pd.isna(a_dt) and not pd.isna(c_dt):
                 otd_val = "OK" if a_dt <= c_dt else "NOT OK"
-    except: pass
+    except Exception as e:
+        print(f"OTD Calc Error: {e}")
 
+    # Prepare Data
     cols = ['name_activity_pilot', 'task_name', 'date_of_receipt', 'actual_delivery_date', 
             'commitment_date_to_customer', 'status', 'ftr_customer', 'reference_part_number', 
             'ftr_internal', 'otd_internal', 'description_of_activity', 'activity_type', 
             'ftr_quality_gate_internal', 'date_of_clarity_in_input', 'start_date', 'otd_customer', 
             'customer_remarks', 'name_quality_gate_referent', 'project_lead', 'customer_manager_name']
     
-    data['otd_internal'] = otd_val; data['otd_customer'] = otd_val
+    data['otd_internal'] = otd_val
+    data['otd_customer'] = otd_val
+    
+    # Ensure all keys exist in data dict
     vals = [str(data.get(k, '')) if data.get(k) is not None else '' for k in cols]
 
     if task_id:
@@ -147,116 +137,54 @@ def save_kpi_task(data, task_id=None):
         new_id = str(uuid.uuid4())[:8]
         placeholders = ",".join(["?"] * (len(cols) + 1))
         c.execute(f"INSERT INTO tasks_v2 VALUES ({placeholders})", (new_id, *vals))
-    conn.commit(); conn.close()
+    
+    conn.commit()
+    conn.close()
 
-def import_kpi_csv(file):
+def import_data_from_csv(file):
     try:
         df = pd.read_csv(file)
-        if 'id' not in df.columns: df['id'] = [str(uuid.uuid4())[:8] for _ in range(len(df))]
+        if 'id' not in df.columns:
+            df['id'] = [str(uuid.uuid4())[:8] for _ in range(len(df))]
         
-        required_cols = ["name_activity_pilot", "task_name", "date_of_receipt", "actual_delivery_date",
+        required_cols = [
+            "name_activity_pilot", "task_name", "date_of_receipt", "actual_delivery_date",
             "commitment_date_to_customer", "status", "ftr_customer", "reference_part_number",
             "ftr_internal", "otd_internal", "description_of_activity", "activity_type",
             "ftr_quality_gate_internal", "date_of_clarity_in_input", "start_date", "otd_customer",
-            "customer_remarks", "name_quality_gate_referent", "project_lead", "customer_manager_name"]
-            
-        for col in required_cols: 
-            if col not in df.columns: df[col] = None
+            "customer_remarks", "name_quality_gate_referent", "project_lead", "customer_manager_name"
+        ]
         
+        for col in required_cols:
+            if col not in df.columns: df[col] = None
+            
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
+        
         cols_to_keep = ['id'] + required_cols
         df = df[cols_to_keep]
+        
         for index, row in df.iterrows():
             placeholders = ','.join(['?'] * len(row))
             sql = f"INSERT OR REPLACE INTO tasks_v2 VALUES ({placeholders})"
             c.execute(sql, tuple(row))
-        conn.commit(); conn.close()
+            
+        conn.commit()
+        conn.close()
         return True
-    except: return False
+    except Exception as e:
+        st.error(f"Import Error: {e}")
+        return False
 
-# --- TRAINING HELPERS ---
-def add_training(title, desc, link, role, mandatory, creator):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    tid = str(uuid.uuid4())[:8]
-    c.execute("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)", 
-              (tid, title, desc, link, role, 1 if mandatory else 0, creator))
-    conn.commit(); conn.close()
-
-def get_trainings(user_name=None):
-    conn = sqlite3.connect(DB_FILE)
-    repo = pd.read_sql_query("SELECT * FROM training_repo", conn)
-    if user_name:
-        prog = pd.read_sql_query("SELECT * FROM training_progress WHERE user_name=?", conn, params=(user_name,))
-        if not repo.empty:
-            merged = pd.merge(repo, prog, left_on='id', right_on='training_id', how='left')
-            merged['status'] = merged['status'].fillna('Not Started')
-            conn.close(); return merged
-    conn.close(); return repo
-
-def update_training_status(user_name, training_id, status):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO training_progress VALUES (?,?,?,?)", 
-              (user_name, training_id, status, str(date.today())))
-    conn.commit(); conn.close()
-
-def import_training_csv(file):
-    try:
-        df = pd.read_csv(file)
-        if 'title' not in df.columns: return False
-        conn = sqlite3.connect(DB_FILE)
-        c = conn.cursor()
-        for _, row in df.iterrows():
-            tid = str(uuid.uuid4())[:8]
-            c.execute("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)", 
-                      (tid, row['title'], row.get('description',''), row.get('link',''), 
-                       row.get('role_target','All'), int(row.get('mandatory',0)), st.session_state['name']))
-        conn.commit(); conn.close()
-        return True
-    except: return False
-
-# --- ONBOARDING HELPERS ---
-def get_onboarding_details(username):
-    conn = sqlite3.connect(DB_FILE)
-    try: df = pd.read_sql_query("SELECT * FROM onboarding_details WHERE username=?", conn, params=(username,))
-    except: df = pd.DataFrame()
-    conn.close()
-    return df
-
-def get_all_onboarding():
-    conn = sqlite3.connect(DB_FILE)
-    try: df = pd.read_sql_query("SELECT * FROM onboarding_details", conn)
-    except: df = pd.DataFrame()
-    conn.close()
-    return df
-
-def save_onboarding_details(data):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT username FROM onboarding_details WHERE username=?", (data['username'],))
-    exists = c.fetchone()
-    cols = ['username', 'fullname', 'emp_id', 'tid', 'location', 'work_mode',
-            'hr_policy_briefing', 'it_system_setup', 'tid_active', 'team_centre_training',
-            'agt_access', 'ext_mail_id', 'rdp_access', 'avd_access', 'teamcenter_access',
-            'blocking_point', 'ticket_raised']
-    vals = [data.get(k) for k in cols]
-    if exists:
-        set_clause = ", ".join([f"{col}=?" for col in cols])
-        c.execute(f"UPDATE onboarding_details SET {set_clause} WHERE username=?", (*vals, data['username']))
-    else:
-        placeholders = ",".join(["?"] * len(cols))
-        c.execute(f"INSERT INTO onboarding_details VALUES ({placeholders})", vals)
-    conn.commit(); conn.close()
-
-# --- PLOTLY HELPERS (Restored) ---
+# --- MISSING PLOTLY FUNCTIONS RESTORED HERE ---
 def get_analytics_chart(df):
     if df.empty: return go.Figure()
     df_local = df.copy()
     df_local['start_date'] = pd.to_datetime(df_local['start_date'], dayfirst=True, errors='coerce')
     df_local = df_local.dropna(subset=['start_date'])
+    # Handle empty date column
     if df_local.empty: return go.Figure()
+    
     df_local['month'] = df_local['start_date'].dt.strftime('%b')
     monthly = df_local.groupby(['month', 'status']).size().reset_index(name='count')
     fig = px.bar(monthly, x='month', y='count', color='status', barmode='group',
@@ -274,11 +202,86 @@ def get_donut(df):
                       annotations=[dict(text=f"{completed_pct}%", x=0.5, y=0.5, showarrow=False, font=dict(size=20))])
     return fig
 
-# ---------- AUTH (Updated with ID & TID) ----------
+def get_ftr_otd_chart(df):
+    if df.empty: return go.Figure()
+    df_local = df.copy()
+    df_local['actual_delivery_date'] = pd.to_datetime(df_local['actual_delivery_date'], dayfirst=True, errors='coerce')
+    df_local = df_local.dropna(subset=['actual_delivery_date'])
+    if df_local.empty: return go.Figure()
+    df_local['month'] = df_local['actual_delivery_date'].dt.strftime('%b')
+    monthly_stats = df_local.groupby('month').agg({
+        'otd_internal': lambda x: ((x=='OK') | (x=='Yes')).mean()*100,
+        'ftr_internal': lambda x: (x=='Yes').mean()*100
+    }).reset_index()
+    fig = go.Figure()
+    fig.add_bar(x=monthly_stats['month'], y=monthly_stats['ftr_internal'], name='FTR %', marker_color='#8e44ad')
+    fig.add_bar(x=monthly_stats['month'], y=monthly_stats['otd_internal'], name='OTD %', marker_color='#2980b9')
+    fig.update_layout(barmode='group', height=300, margin=dict(l=0,r=0,t=10,b=0))
+    return fig
+
+# --- Training / Onboarding Logic ---
+def add_training(title, desc, link, role, mandatory, creator):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    tid = str(uuid.uuid4())[:8]
+    c.execute("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)", 
+              (tid, title, desc, link, role, 1 if mandatory else 0, creator))
+    conn.commit()
+    conn.close()
+
+def get_trainings(user_name=None):
+    conn = sqlite3.connect(DB_FILE)
+    repo = pd.read_sql_query("SELECT * FROM training_repo", conn)
+    if user_name:
+        prog = pd.read_sql_query("SELECT * FROM training_progress WHERE user_name=?", conn, params=(user_name,))
+        if not repo.empty:
+            merged = pd.merge(repo, prog, left_on='id', right_on='training_id', how='left')
+            merged['status'] = merged['status'].fillna('Not Started')
+            conn.close()
+            return merged
+    conn.close()
+    return repo
+
+def update_training_status(user_name, training_id, status):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO training_progress VALUES (?,?,?,?)", 
+              (user_name, training_id, status, str(date.today())))
+    conn.commit()
+    conn.close()
+
+def add_onboarding_task(name, desc):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    tid = str(uuid.uuid4())[:8]
+    c.execute("INSERT INTO onboarding_tasks VALUES (?,?,?)", (tid, name, desc))
+    conn.commit()
+    conn.close()
+
+def get_onboarding_status(user_name):
+    conn = sqlite3.connect(DB_FILE)
+    tasks = pd.read_sql_query("SELECT * FROM onboarding_tasks", conn)
+    prog = pd.read_sql_query("SELECT * FROM onboarding_progress WHERE user_name=?", conn, params=(user_name,))
+    if tasks.empty:
+        conn.close(); return pd.DataFrame()
+    merged = pd.merge(tasks, prog, left_on='id', right_on='task_id', how='left')
+    merged['is_completed'] = merged['is_completed'].fillna(0)
+    conn.close()
+    return merged
+
+def toggle_onboarding(user_name, task_id, checked):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    val = 1 if checked else 0
+    c.execute("INSERT OR REPLACE INTO onboarding_progress VALUES (?,?,?)", (user_name, task_id, val))
+    conn.commit()
+    conn.close()
+
+# ---------- AUTH ----------
 USERS = {
-    "leader": {"password": "123", "role": "Team Leader", "name": "Sarah Jenkins", "emp_id": "LDR-001", "tid": "TID-999", "img": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200&h=200"},
-    "member1": {"password": "123", "role": "Team Member", "name": "David Chen", "emp_id": "EMP-101", "tid": "TID-101", "img": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200&h=200"},
-    "member2": {"password": "123", "role": "Team Member", "name": "Emily Davis", "emp_id": "EMP-102", "tid": "TID-102", "img": "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=200&h=200"}
+    "leader": {"password": "123", "role": "Team Leader", "name": "Sarah Jenkins", "img": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200&h=200"},
+    "member1": {"password": "123", "role": "Team Member", "name": "David Chen", "img": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200&h=200"},
+    "member2": {"password": "123", "role": "Team Member", "name": "Emily Davis", "img": "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=200&h=200"}
 }
 
 def login_page():
@@ -293,85 +296,116 @@ def login_page():
                 if u in USERS and USERS[u]["password"] == p:
                     st.session_state.update({
                         'logged_in': True, 'user': u, 'role': USERS[u]['role'], 
-                        'name': USERS[u]['name'], 'emp_id': USERS[u].get('emp_id'),
-                        'tid': USERS[u].get('tid'), 'img': USERS[u]['img'], 'current_app': 'HOME'
+                        'name': USERS[u]['name'], 'img': USERS[u]['img'], 'current_app': 'HOME'
                     })
                     st.rerun()
                 else:
                     st.error("Invalid credentials.")
 
 # ---------- APP SECTIONS ----------
+
 def app_home():
     st.markdown(f"## Welcome, {st.session_state['name']}")
-    st.caption(f"ID: {st.session_state.get('emp_id')} | TID: {st.session_state.get('tid')}")
+    st.caption("Select a module below to begin.")
     st.write("---")
     
-    # RESPONSIVE GRID (2x2)
-    r1c1, r1c2 = st.columns(2)
-    with r1c1:
-        with st.container(border=True):
-            st.markdown("### 📊 **KPI System**"); st.caption("Manage OTD & FTR")
-            if st.button("Launch KPI", use_container_width=True, type="primary"): st.session_state['current_app']='KPI'; st.rerun()
-    with r1c2:
-        with st.container(border=True):
-            st.markdown("### 🎓 **Training**"); st.caption("Track Progress")
-            if st.button("Launch Training", use_container_width=True, type="primary"): st.session_state['current_app']='TRAINING'; st.rerun()
+    # STABLE LAYOUT: 4 Columns (Stacks on mobile naturally)
+    c1, c2, c3, c4 = st.columns(4)
     
-    r2c1, r2c2 = st.columns(2)
-    with r2c1:
+    with c1:
         with st.container(border=True):
-            st.markdown("### 🚀 **Onboarding**"); st.caption("New Hire Setup")
-            if st.button("Launch Setup", use_container_width=True, type="primary"): st.session_state['current_app']='ONBOARDING'; st.rerun()
-    with r2c2:
-        with st.container(border=True):
-            st.markdown("### 🕸️ **Skill Radar**"); st.caption("Team Matrix")
-            if st.button("View Radar", use_container_width=True): st.toast("🚧 Under Construction!", icon="👷")
+            st.markdown("### 📊")
+            st.markdown("**KPI System**")
+            st.caption("Manage OTD & FTR")
+            if st.button("Launch KPI", use_container_width=True, type="primary"):
+                st.session_state['current_app'] = 'KPI'
+                st.rerun()
 
+    with c2:
+        with st.container(border=True):
+            st.markdown("### 🎓")
+            st.markdown("**Training Hub**")
+            st.caption("Track Progress")
+            if st.button("Launch Training", use_container_width=True, type="primary"):
+                st.session_state['current_app'] = 'TRAINING'
+                st.rerun()
+
+    with c3:
+        with st.container(border=True):
+            st.markdown("### 🚀")
+            st.markdown("**Onboarding**")
+            st.caption("New Hire Setup")
+            if st.button("Launch Setup", use_container_width=True, type="primary"):
+                st.session_state['current_app'] = 'ONBOARDING'
+                st.rerun()
+
+    with c4:
+        with st.container(border=True):
+            st.markdown("### 🕸️")
+            st.markdown("**Skill Radar**")
+            st.caption("Team Matrix")
+            if st.button("View Radar", use_container_width=True):
+                st.toast("🚧 Under Construction!", icon="👷")
+
+# --- KPI APP (Fixed) ---
 def parse_date(d):
     if not d or d == 'None': return None
     try: return pd.to_datetime(d).date()
     except: return None
 
-# --- FULL KPI APP (Restored) ---
 def app_kpi():
+    # Navigation
     c1, c2 = st.columns([1, 6])
     with c1:
-        if st.button("⬅ Home", use_container_width=True): st.session_state['current_app']='HOME'; st.rerun()
-    with c2: st.markdown("### 📊 KPI Management System")
+        if st.button("⬅ Home", use_container_width=True):
+            st.session_state['current_app'] = 'HOME'
+            st.rerun()
+    with c2:
+        st.markdown("### 📊 KPI Management System")
     st.markdown("---")
     
-    # TEAM LEADER
+    # TEAM LEADER VIEW
     if st.session_state['role'] == "Team Leader":
         df = get_kpi_data()
         
-        # 1. Editor
-        if 'edit_kpi_id' not in st.session_state: st.session_state['edit_kpi_id'] = None
+        # 1. State Management for Forms
+        if 'edit_kpi_id' not in st.session_state:
+            st.session_state['edit_kpi_id'] = None
+
+        # 2. EDITOR SECTION (Appears at top if editing/creating)
         if st.session_state['edit_kpi_id']:
             with st.container(border=True):
                 is_new = st.session_state['edit_kpi_id'] == 'NEW'
-                st.subheader("Create/Edit Task")
+                st.subheader("Create Task" if is_new else "Edit Task")
+                
+                # Load default data if editing
                 default_data = {}
                 if not is_new:
                     task_row = df[df['id'] == st.session_state['edit_kpi_id']]
-                    if not task_row.empty: default_data = task_row.iloc[0].to_dict()
+                    if not task_row.empty:
+                        default_data = task_row.iloc[0].to_dict()
 
                 with st.form("kpi_editor_form"):
                     c1, c2, c3 = st.columns(3)
                     pilots = [u['name'] for k,u in USERS.items() if u['role']=="Team Member"]
+                    
                     with c1:
                         tname = st.text_input("Task Name", value=default_data.get("task_name", ""))
                         pilot_val = default_data.get("name_activity_pilot")
                         p_idx = pilots.index(pilot_val) if pilot_val in pilots else 0
                         pilot = st.selectbox("Assign To", pilots, index=p_idx)
+                        
                     with c2:
                         statuses = ["Hold", "Inprogress", "Completed", "Cancelled"]
                         stat_val = default_data.get("status", "Inprogress")
                         s_idx = statuses.index(stat_val) if stat_val in statuses else 1
                         status = st.selectbox("Status", statuses, index=s_idx)
                         start_d = st.date_input("Start Date", value=parse_date(default_data.get("start_date")) or date.today())
+                    
                     with c3:
                         comm_d = st.date_input("Commitment Date", value=parse_date(default_data.get("commitment_date_to_customer")) or date.today()+timedelta(days=7))
                         act_d = st.date_input("Actual Delivery", value=parse_date(default_data.get("actual_delivery_date")) or date.today())
+                    
                     st.divider()
                     c4, c5 = st.columns(2)
                     with c4:
@@ -380,48 +414,60 @@ def app_kpi():
                     with c5:
                         ftr = st.selectbox("FTR Internal", ["Yes", "No"], index=0)
                         rem = st.text_area("Remarks", value=default_data.get("customer_remarks", ""))
+
+                    col_sub, col_can = st.columns([1, 1])
+                    with col_sub:
+                        if st.form_submit_button("💾 Save Task", type="primary", use_container_width=True):
+                            payload = {
+                                "task_name": tname, "name_activity_pilot": pilot, "status": status,
+                                "start_date": str(start_d), "commitment_date_to_customer": str(comm_d),
+                                "actual_delivery_date": str(act_d), "description_of_activity": desc,
+                                "reference_part_number": ref_part, "ftr_internal": ftr, "customer_remarks": rem,
+                                "date_of_receipt": str(date.today()), "activity_type": "Standard" # Defaults
+                            }
+                            save_kpi_task(payload, None if is_new else st.session_state['edit_kpi_id'])
+                            st.success("Saved successfully!")
+                            st.session_state['edit_kpi_id'] = None
+                            st.rerun()
                     
-                    if st.form_submit_button("💾 Save Task", type="primary", use_container_width=True):
-                        payload = {
-                            "task_name": tname, "name_activity_pilot": pilot, "status": status,
-                            "start_date": str(start_d), "commitment_date_to_customer": str(comm_d),
-                            "actual_delivery_date": str(act_d), "description_of_activity": desc,
-                            "reference_part_number": ref_part, "ftr_internal": ftr, "customer_remarks": rem,
-                            "date_of_receipt": str(date.today()), "activity_type": "Standard"
-                        }
-                        save_kpi_task(payload, None if is_new else st.session_state['edit_kpi_id'])
-                        st.success("Saved successfully!")
-                        st.session_state['edit_kpi_id'] = None
-                        st.rerun()
                 if st.button("Cancel", use_container_width=True):
-                    st.session_state['edit_kpi_id'] = None; st.rerun()
+                    st.session_state['edit_kpi_id'] = None
+                    st.rerun()
             st.markdown("---")
 
-        # 2. Dashboard
+        # 3. DASHBOARD VIEW (Shown when not editing)
         if not st.session_state['edit_kpi_id']:
+            # Metrics
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Tasks", len(df))
             m2.metric("In Progress", len(df[df['status']=='Inprogress']) if not df.empty else 0)
             m3.metric("On Hold", len(df[df['status']=='Hold']) if not df.empty else 0)
             m4.metric("Completed", len(df[df['status']=='Completed']) if not df.empty else 0)
             
+            # Toolbar
             tb1, tb2 = st.columns([3, 1])
             with tb1:
                 with st.expander("📂 CSV Import/Export"):
                     up = st.file_uploader("Import CSV", type=['csv'])
-                    if up: 
-                        if import_kpi_csv(up): st.success("Imported!"); st.rerun()
+                    if up:
+                        if import_data_from_csv(up): st.success("Imported!")
+                        st.rerun()
                     if not df.empty:
                         st.download_button("Export CSV", data=df.to_csv(index=False).encode('utf-8'), file_name="kpi.csv", mime="text/csv")
             with tb2:
                 if st.button("➕ New Task", type="primary", use_container_width=True):
-                    st.session_state['edit_kpi_id'] = "NEW"; st.rerun()
+                    st.session_state['edit_kpi_id'] = "NEW"
+                    st.rerun()
 
+            # Charts
             c_chart, c_donut = st.columns([2, 1])
             if not df.empty:
-                with c_chart: st.plotly_chart(get_analytics_chart(df), use_container_width=True)
-                with c_donut: st.plotly_chart(get_donut(df), use_container_width=True)
+                with c_chart:
+                    st.plotly_chart(get_analytics_chart(df), use_container_width=True)
+                with c_donut:
+                    st.plotly_chart(get_donut(df), use_container_width=True)
             
+            # Task List
             st.markdown("#### Active Tasks")
             if not df.empty:
                 for idx, row in df.iterrows():
@@ -436,56 +482,58 @@ def app_kpi():
                             st.write(f"**{row['status']}**")
                         with c_btn:
                             if st.button("Edit", key=f"kpi_edit_{row['id']}", use_container_width=True):
-                                st.session_state['edit_kpi_id'] = row['id']; st.rerun()
-            else: st.info("No tasks found.")
+                                st.session_state['edit_kpi_id'] = row['id']
+                                st.rerun()
+            else:
+                st.info("No tasks found.")
 
-    # MEMBER
+    # TEAM MEMBER VIEW
     else:
         df = get_kpi_data()
         my_tasks = df[df['name_activity_pilot'] == st.session_state['name']]
+        
         st.metric("My Pending Tasks", len(my_tasks[my_tasks['status']!='Completed']) if not my_tasks.empty else 0)
+        
         if not my_tasks.empty:
             for idx, row in my_tasks.iterrows():
                 with st.container(border=True):
                     st.markdown(f"**{row['task_name']}**")
                     st.write(f"Due: {row.get('commitment_date_to_customer','-')}")
+                    
                     with st.form(key=f"my_task_{row['id']}"):
                         c1, c2 = st.columns(2)
                         curr_stat = row.get('status', 'Inprogress')
                         idx_stat = ["Inprogress", "Completed", "Hold"].index(curr_stat) if curr_stat in ["Inprogress", "Completed", "Hold"] else 0
+                        
                         ns = c1.selectbox("Status", ["Inprogress", "Completed", "Hold"], index=idx_stat)
                         ad = c2.date_input("Actual Delivery", value=parse_date(row.get('actual_delivery_date')) or date.today())
+                        
                         if st.form_submit_button("Update", type="primary"):
+                            # Simple update logic
                             conn = sqlite3.connect(DB_FILE)
                             conn.execute("UPDATE tasks_v2 SET status=?, actual_delivery_date=? WHERE id=?", (ns, str(ad), row['id']))
-                            conn.commit(); conn.close()
-                            st.success("Updated!"); st.rerun()
+                            conn.commit()
+                            conn.close()
+                            st.success("Updated!")
+                            st.rerun()
 
-# --- TRAINING APP (Restored) ---
 def app_training():
     c1, c2 = st.columns([1, 6])
     with c1:
-        if st.button("⬅ Home", use_container_width=True): st.session_state['current_app']='HOME'; st.rerun()
-    with c2: st.markdown("### 🎓 Training Hub")
+        if st.button("⬅ Home", use_container_width=True):
+            st.session_state['current_app'] = 'HOME'
+            st.rerun()
+    with c2:
+        st.markdown("### 🎓 Training Hub")
     st.markdown("---")
 
     if st.session_state['role'] == "Team Leader":
-        t1, t2 = st.tabs(["Repository", "Add New"])
-        with t1:
+        tabs = st.tabs(["Repository", "Add New"])
+        with tabs[0]:
             df = get_trainings()
-            with st.expander("📂 Import / Export"):
-                col_imp, col_exp = st.columns(2)
-                with col_imp:
-                    up_train = st.file_uploader("Upload CSV", type=['csv'])
-                    if up_train:
-                        if import_training_csv(up_train): st.rerun()
-                with col_exp:
-                    if not df.empty:
-                        csv = df.to_csv(index=False).encode('utf-8')
-                        st.download_button("Download CSV", data=csv, file_name="training_repo.csv", mime="text/csv")
             if not df.empty: st.dataframe(df, use_container_width=True)
             else: st.info("Repository empty.")
-        with t2:
+        with tabs[1]:
             with st.form("add_training_form"):
                 tt = st.text_input("Title")
                 td = st.text_area("Desc")
@@ -499,6 +547,7 @@ def app_training():
         if not df.empty:
             comp = len(df[df['status']=='Completed'])
             st.progress(comp/len(df), text=f"Progress: {int((comp/len(df))*100)}%")
+        
         st.markdown("#### Modules")
         if df.empty: st.info("No training found.")
         else:
@@ -511,120 +560,57 @@ def app_training():
                         st.markdown(f"[{row['link']}]({row['link']})")
                     with c2:
                         c_stat = row['status']
+                        # Unique key is crucial here
                         n_stat = st.selectbox("Status", ["Not Started", "In Progress", "Completed"], 
                                               index=["Not Started", "In Progress", "Completed"].index(c_stat), 
                                               key=f"tr_stat_{row['id']}", label_visibility="collapsed")
                         if n_stat != c_stat:
-                            update_training_status(st.session_state['name'], row['id'], n_stat); st.rerun()
+                            update_training_status(st.session_state['name'], row['id'], n_stat)
+                            st.rerun()
 
-# --- ONBOARDING APP (With Blocking Point Logic) ---
 def app_onboarding():
     c1, c2 = st.columns([1, 6])
     with c1:
-        if st.button("⬅ Home", use_container_width=True): st.session_state['current_app']='HOME'; st.rerun()
-    with c2: st.markdown("### 🚀 Onboarding Form")
+        if st.button("⬅ Home", use_container_width=True):
+            st.session_state['current_app'] = 'HOME'
+            st.rerun()
+    with c2:
+        st.markdown("### 🚀 Onboarding")
     st.markdown("---")
 
     if st.session_state['role'] == "Team Leader":
-        st.markdown("#### Team Onboarding Status")
-        df = get_all_onboarding()
-        if not df.empty:
-            st.dataframe(df, use_container_width=True)
-            st.markdown("#### Manager Validation")
-            user_to_edit = st.selectbox("Select User", df['fullname'].unique())
-            if user_to_edit:
-                row = df[df['fullname']==user_to_edit].iloc[0]
-                with st.form("pm_validation"):
-                    st.write(f"Validating for: **{user_to_edit}**")
-                    c1, c2, c3 = st.columns(3)
-                    tid_act = c1.checkbox("TID Active", value=bool(row['tid_active']))
-                    ext_mail = c2.checkbox("Ext. Mail", value=bool(row['ext_mail_id']))
-                    tc_acc = c3.checkbox("Teamcenter Access", value=bool(row['teamcenter_access']))
-                    if st.form_submit_button("Update PM Fields"):
-                        data = row.to_dict()
-                        data['tid_active'] = 1 if tid_act else 0
-                        data['ext_mail_id'] = 1 if ext_mail else 0
-                        data['teamcenter_access'] = 1 if tc_acc else 0
-                        save_onboarding_details(data); st.success("Validated!"); st.rerun()
-        else: st.info("No records.")
-
+        st.markdown("#### Setup")
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            with st.form("add_ob_form"):
+                t = st.text_input("Task"); d = st.text_input("Details")
+                if st.form_submit_button("Add", type="primary", use_container_width=True):
+                    add_onboarding_task(t, d); st.success("Added"); st.rerun()
+        with c2:
+            conn = sqlite3.connect(DB_FILE)
+            tasks = pd.read_sql_query("SELECT * FROM onboarding_tasks", conn)
+            conn.close()
+            if not tasks.empty: st.dataframe(tasks, use_container_width=True)
     else:
-        df = get_onboarding_details(st.session_state['user'])
-        defaults = df.iloc[0].to_dict() if not df.empty else {}
-        with st.container(border=True):
-            st.subheader("Employee Checklist")
-            st.markdown("##### 👤 Employee Details")
-            ac1, ac2, ac3 = st.columns(3)
-            ac1.text_input("Full Name", value=st.session_state['name'], disabled=True)
-            ac2.text_input("Employee ID", value=st.session_state['emp_id'], disabled=True)
-            ac3.text_input("TID", value=st.session_state['tid'], disabled=True)
-
-            with st.form("onboarding_form"):
-                lc1, lc2 = st.columns(2)
-                loc = lc1.selectbox("Location", ["Chennai", "Pune", "Bangalore", "Client Site"], 
-                                    index=["Chennai", "Pune", "Bangalore", "Client Site"].index(defaults.get('location', 'Chennai')))
-                work_mode = lc2.selectbox("Work Mode", ["Office", "Remote"], 
-                                          index=["Office", "Remote"].index(defaults.get('work_mode', 'Office')))
-
-                st.markdown("---")
-                st.markdown("##### ✅ Checklist")
-                r1c1, r1c2, r1c3 = st.columns(3)
-                hr_pol = r1c1.checkbox("HR Policy Briefing", value=bool(defaults.get('hr_policy_briefing', 0)))
-                it_set = r1c2.checkbox("IT System Setup", value=bool(defaults.get('it_system_setup', 0)))
-                tc_trn = r1c3.checkbox("Team Centre Training", value=bool(defaults.get('team_centre_training', 0)))
-
-                st.write("")
-                st.markdown("**Remote / Access Validations**")
-                r2c1, r2c2, r2c3 = st.columns(3)
-                agt_val = bool(defaults.get('agt_access', 0))
-                rdp_val = bool(defaults.get('rdp_access', 0))
-                avd_val = bool(defaults.get('avd_access', 0))
-                
-                if work_mode == "Remote":
-                    r2c1.markdown("*(Required)*")
-                    agt = r2c1.checkbox("AGT Access", value=agt_val)
-                    r2c2.markdown("*(Required)*")
-                    rdp = r2c2.checkbox("RDP Access", value=rdp_val)
-                    r2c3.markdown("*(Required)*")
-                    avd = r2c3.checkbox("AVD Access", value=avd_val)
-                else:
-                    r2c1.markdown("*(N/A)*"); agt = r2c1.checkbox("AGT Access", value=agt_val, disabled=True)
-                    r2c2.markdown("*(N/A)*"); rdp = r2c2.checkbox("RDP Access", value=rdp_val, disabled=True)
-                    r2c3.markdown("*(N/A)*"); avd = r2c3.checkbox("AVD Access", value=avd_val, disabled=True)
-
-                st.markdown("---")
-                st.markdown("##### 🔒 Manager / IT Approvals (Read Only)")
-                m1, m2, m3 = st.columns(3)
-                m1.checkbox("TID Active", value=bool(defaults.get('tid_active', 0)), disabled=True)
-                m2.checkbox("External Mail ID", value=bool(defaults.get('ext_mail_id', 0)), disabled=True)
-                m3.checkbox("Teamcenter Access", value=bool(defaults.get('teamcenter_access', 0)), disabled=True)
-
-                st.markdown("---")
-                st.markdown("##### ⚠️ Issues")
-                bp = st.text_input("Blocking Point (If any)", value=defaults.get('blocking_point', ''))
-                
-                ticket_action = defaults.get('ticket_raised', '')
-                raise_ticket = False
-                if bp:
-                    st.warning("Blocking point detected.")
-                    if ticket_action: st.success(f"Ticket Raised: {ticket_action}")
-                    else: raise_ticket = st.checkbox("Raise IT Ticket?")
-
-                if st.form_submit_button("💾 Save Form", type="primary"):
-                    new_ticket_status = ticket_action
-                    if raise_ticket and not ticket_action: new_ticket_status = f"TKT-{str(uuid.uuid4())[:6]}"
-                    payload = {
-                        "username": st.session_state['user'], "fullname": st.session_state['name'],
-                        "emp_id": st.session_state['emp_id'], "tid": st.session_state['tid'],
-                        "location": loc, "work_mode": work_mode,
-                        "hr_policy_briefing": 1 if hr_pol else 0, "it_system_setup": 1 if it_set else 0,
-                        "tid_active": defaults.get('tid_active', 0), "team_centre_training": 1 if tc_trn else 0,
-                        "agt_access": 1 if agt else 0, "ext_mail_id": defaults.get('ext_mail_id', 0),
-                        "rdp_access": 1 if rdp else 0, "avd_access": 1 if avd else 0,
-                        "teamcenter_access": defaults.get('teamcenter_access', 0),
-                        "blocking_point": bp, "ticket_raised": new_ticket_status
-                    }
-                    save_onboarding_details(payload); st.success("Saved!"); st.rerun()
+        st.markdown(f"#### Checklist")
+        df = get_onboarding_status(st.session_state['name'])
+        if df.empty: st.info("No checklist.")
+        else:
+            comp = df['is_completed'].sum(); total = len(df)
+            st.progress(comp/total, text=f"{int(comp)}/{total} Done")
+            
+            with st.container(border=True):
+                for _, row in df.iterrows():
+                    is_done = bool(row['is_completed'])
+                    c1, c2 = st.columns([0.15, 0.85])
+                    with c1:
+                        checked = st.checkbox("", value=is_done, key=f"ob_chk_{row['id']}")
+                    with c2:
+                        st.markdown(f"<div style='margin-top:5px; {'text-decoration:line-through; color:gray;' if is_done else 'font-weight:bold;'}'>{row['task_name']}</div>", unsafe_allow_html=True)
+                        if not is_done: st.caption(row['description'])
+                    if checked != is_done:
+                        toggle_onboarding(st.session_state['name'], row['id'], checked)
+                        st.rerun()
 
 # ---------- MAIN CONTROLLER ----------
 def main():
@@ -636,11 +622,15 @@ def main():
     if st.session_state['logged_in']:
         with st.sidebar:
             img_url = st.session_state.get('img', '')
-            if img_url: st.markdown(f"<img src='{img_url}' class='profile-img'>", unsafe_allow_html=True)
+            if img_url:
+                st.markdown(f"<img src='{img_url}' class='profile-img'>", unsafe_allow_html=True)
+            
             st.markdown(f"<h3 style='text-align:center;'>{st.session_state.get('name','')}</h3>", unsafe_allow_html=True)
             st.markdown(f"<p style='text-align:center; color:gray;'>{st.session_state.get('role','')}</p>", unsafe_allow_html=True)
             st.markdown("---")
-            if st.button("Sign Out", use_container_width=True): st.session_state.clear(); st.rerun()
+            if st.button("Sign Out", use_container_width=True):
+                st.session_state.clear()
+                st.rerun()
 
     if not st.session_state['logged_in']:
         login_page()
