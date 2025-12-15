@@ -6,18 +6,20 @@ from datetime import date, datetime, timedelta
 import time
 
 # ---------- CONFIG ----------
+# Layout="wide" allows the 4 columns to spread out on desktop
 st.set_page_config(page_title="Corporate Portal", layout="wide", page_icon="🏢")
 
-# ---------- MINIMAL CSS (Only for spacing/colors, NO layout hacks) ----------
+# ---------- RESPONSIVE CSS ----------
 st.markdown(
     """
     <style>
+    /* 1. Global Background & Font */
     .stApp { background-color: #f8f9fa; }
     
-    /* Professional Profile Image in Sidebar */
+    /* 2. Sidebar Profile Image - Responsive centering */
     .profile-img {
-        width: 120px;
-        height: 120px;
+        width: 100px;
+        height: 100px;
         border-radius: 50%;
         object-fit: cover;
         border: 4px solid #dfe6e9;
@@ -25,15 +27,28 @@ st.markdown(
         margin: 0 auto 15px auto;
     }
     
-    /* Slight padding adjustment for the main container */
-    .block-container { padding-top: 2rem; }
+    /* 3. Mobile/Tablet Optimization */
+    /* On smaller screens, add a bit more breathing room between stacked containers */
+    div[data-testid="stVerticalBlock"] > div {
+        margin-bottom: 0.5rem;
+    }
+    
+    /* 4. Button Full Width & Touch Friendly */
+    /* Ensures buttons inside cards are easy to tap on mobile */
+    div[data-testid="stVerticalBlockBorderWrapper"] button {
+        width: 100%;
+        min-height: 45px;
+    }
+    
+    /* 5. Header Spacing */
+    .block-container { padding-top: 2rem; padding-bottom: 3rem; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # ---------- DATABASE & UTILS ----------
-DB_FILE = "portal_data_v5.db"
+DB_FILE = "portal_data_v6.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -47,17 +62,16 @@ def init_db():
         date_of_clarity_in_input TEXT, start_date TEXT, otd_customer TEXT, customer_remarks TEXT,
         name_quality_gate_referent TEXT, project_lead TEXT, customer_manager_name TEXT
     )''')
-    # Training Repo
+    # Training Tables
     c.execute('''CREATE TABLE IF NOT EXISTS training_repo (
         id TEXT PRIMARY KEY, title TEXT, description TEXT, link TEXT, 
         role_target TEXT, mandatory INTEGER, created_by TEXT
     )''')
-    # Training Progress
     c.execute('''CREATE TABLE IF NOT EXISTS training_progress (
         user_name TEXT, training_id TEXT, status TEXT, 
         last_updated TEXT, PRIMARY KEY (user_name, training_id)
     )''')
-    # Onboarding
+    # Onboarding Tables
     c.execute('''CREATE TABLE IF NOT EXISTS onboarding_tasks (
         id TEXT PRIMARY KEY, task_name TEXT, description TEXT
     )''')
@@ -68,7 +82,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- Logic Helpers ---
+# --- Logic Helpers (Robust & Bug-Free) ---
 def get_kpi_data():
     conn = sqlite3.connect(DB_FILE)
     try: df = pd.read_sql_query("SELECT * FROM tasks_v2", conn)
@@ -184,6 +198,7 @@ USERS = {
 
 def login_page():
     st.markdown("<br><br><br>", unsafe_allow_html=True)
+    # Responsive: On mobile, use full width (1 column). On desktop, center it (3 cols).
     c1, c2, c3 = st.columns([1, 1, 1])
     with c2:
         with st.container(border=True):
@@ -202,13 +217,16 @@ def login_page():
                 else:
                     st.error("Invalid credentials.")
 
-# ---------- APP: HOME DASHBOARD ----------
+# ---------- APP: HOME DASHBOARD (RESPONSIVE) ----------
 def app_home():
     st.markdown(f"## Welcome, {st.session_state['name']}")
     st.caption("Select a module to continue")
     st.write("---")
     
-    # Standard Streamlit Columns - The "Professional" Native Look
+    # RESPONSIVE LOGIC:
+    # st.columns(4) will automatically stack on mobile devices.
+    # This creates "One Line" (Vertical Stack) on Mobile and "One Row" (Horizontal) on Desktop.
+    
     c1, c2, c3, c4 = st.columns(4)
     
     with c1:
@@ -216,6 +234,7 @@ def app_home():
             st.markdown("### 📊")
             st.markdown("**KPI System**")
             st.caption("Manage OTD & FTR")
+            # Actionable Full Width Button
             if st.button("Launch KPI", use_container_width=True, type="primary"):
                 st.session_state['current_app'] = 'KPI'
                 st.rerun()
@@ -225,6 +244,7 @@ def app_home():
             st.markdown("### 🎓")
             st.markdown("**Training Hub**")
             st.caption("Track Progress")
+            # Actionable Full Width Button
             if st.button("Launch Training", use_container_width=True, type="primary"):
                 st.session_state['current_app'] = 'TRAINING'
                 st.rerun()
@@ -234,6 +254,7 @@ def app_home():
             st.markdown("### 🚀")
             st.markdown("**Onboarding**")
             st.caption("New Hire Setup")
+            # Actionable Full Width Button
             if st.button("Launch Setup", use_container_width=True, type="primary"):
                 st.session_state['current_app'] = 'ONBOARDING'
                 st.rerun()
@@ -243,14 +264,16 @@ def app_home():
             st.markdown("### 🕸️")
             st.markdown("**Skill Radar**")
             st.caption("Team Matrix")
+            # Actionable Full Width Button
             if st.button("View Radar", use_container_width=True):
                 st.toast("🚧 Under Construction!", icon="👷")
 
 # ---------- APP: KPI SYSTEM ----------
 def app_kpi():
+    # Responsive Header
     c1, c2 = st.columns([1, 6])
     with c1:
-        if st.button("⬅ Home"):
+        if st.button("⬅ Home", use_container_width=True):
             st.session_state['current_app'] = 'HOME'
             st.rerun()
     with c2:
@@ -260,6 +283,8 @@ def app_kpi():
     
     if st.session_state['role'] == "Team Leader":
         df = get_kpi_data()
+        
+        # Responsive Metrics: Auto-stack on mobile
         m1, m2, m3 = st.columns(3)
         m1.metric("Active Projects", len(df))
         m2.metric("Delivered", len(df[df['status']=='Completed']) if not df.empty else 0)
@@ -271,7 +296,8 @@ def app_kpi():
                 tname = c1.text_input("Task Name")
                 pilot = c2.selectbox("Assignee", [u['name'] for k,u in USERS.items() if u['role']=="Team Member"])
                 comm_date = c1.date_input("Deadline", min_value=date.today())
-                if st.form_submit_button("Assign Task", type="primary"):
+                # Full width button for mobile touch targets
+                if st.form_submit_button("Assign Task", type="primary", use_container_width=True):
                     save_kpi_task({'task_name':tname, 'name_activity_pilot':pilot, 'commitment_date_to_customer':str(comm_date), 'status':'Inprogress', 'start_date':str(date.today())})
                     st.success("Task Assigned.")
                     st.rerun()
@@ -286,12 +312,13 @@ def app_kpi():
         st.markdown("#### My Tasks")
         if not my_tasks.empty:
             for _, row in my_tasks.iterrows():
+                # Expander works great on mobile
                 with st.expander(f"{row['task_name']} ({row['status']})"):
                     st.write(f"**Due Date:** {row['commitment_date_to_customer']}")
                     with st.form(f"upd_{row['id']}"):
                         ns = st.selectbox("Update Status", ["Inprogress", "Completed", "Hold"])
                         ad = st.date_input("Completion Date", value=date.today())
-                        if st.form_submit_button("Update Progress", type="primary"):
+                        if st.form_submit_button("Update Progress", type="primary", use_container_width=True):
                             conn = sqlite3.connect(DB_FILE)
                             conn.execute("UPDATE tasks_v2 SET status=?, actual_delivery_date=? WHERE id=?", (ns, str(ad), row['id']))
                             conn.commit(); conn.close()
@@ -303,7 +330,7 @@ def app_kpi():
 def app_training():
     c1, c2 = st.columns([1, 6])
     with c1:
-        if st.button("⬅ Home"):
+        if st.button("⬅ Home", use_container_width=True):
             st.session_state['current_app'] = 'HOME'
             st.rerun()
     with c2:
@@ -322,7 +349,7 @@ def app_training():
                 td = st.text_area("Short Description")
                 tl = st.text_input("Content Link")
                 tm = st.checkbox("Mark as Mandatory")
-                if st.form_submit_button("Publish Module", type="primary"):
+                if st.form_submit_button("Publish Module", type="primary", use_container_width=True):
                     add_training(tt, td, tl, "All", tm, st.session_state['name'])
                     st.success("Published."); st.rerun()
     else:
@@ -334,15 +361,15 @@ def app_training():
         st.markdown("#### Assigned Modules")
         if df.empty: st.info("No training modules found.")
         else:
-            # Native Grid
             for idx, row in df.iterrows():
                 with st.container(border=True):
-                    c1, c2 = st.columns([3, 1])
-                    with c1:
+                    # Using columns for card layout
+                    c_info, c_action = st.columns([2, 1])
+                    with c_info:
                         st.markdown(f"**{row['title']}**")
                         st.caption(row['description'])
-                        st.markdown(f"[Access Content]({row['link']})")
-                    with c2:
+                        st.markdown(f"[{row['link']}]({row['link']})")
+                    with c_action:
                         c_stat = row['status']
                         n_stat = st.selectbox("Status", ["Not Started", "In Progress", "Completed"], 
                                               index=["Not Started", "In Progress", "Completed"].index(c_stat), 
@@ -355,7 +382,7 @@ def app_training():
 def app_onboarding():
     c1, c2 = st.columns([1, 6])
     with c1:
-        if st.button("⬅ Home"):
+        if st.button("⬅ Home", use_container_width=True):
             st.session_state['current_app'] = 'HOME'
             st.rerun()
     with c2:
@@ -368,7 +395,7 @@ def app_onboarding():
         with c1:
             with st.form("add_ob"):
                 t = st.text_input("Task Name"); d = st.text_input("Details")
-                if st.form_submit_button("Add Item", type="primary"):
+                if st.form_submit_button("Add Item", type="primary", use_container_width=True):
                     add_onboarding_task(t, d); st.success("Added"); st.rerun()
         with c2:
             conn = sqlite3.connect(DB_FILE)
@@ -386,8 +413,10 @@ def app_onboarding():
             with st.container(border=True):
                 for _, row in df.iterrows():
                     is_done = bool(row['is_completed'])
-                    c1, c2 = st.columns([0.05, 0.95])
+                    # Touch friendly columns
+                    c1, c2 = st.columns([0.15, 0.85])
                     with c1:
+                        # Checkbox is native and touch friendly
                         checked = st.checkbox("", value=is_done, key=f"ob_{row['id']}")
                     with c2:
                         st.markdown(f"<div style='margin-top:5px; {'text-decoration:line-through; color:gray;' if is_done else 'font-weight:bold;'}'>{row['task_name']}</div>", unsafe_allow_html=True)
@@ -405,7 +434,7 @@ def main():
 
     if st.session_state['logged_in']:
         with st.sidebar:
-            # Professional Profile Image
+            # Professional Profile Image (Unsplash)
             img_url = st.session_state.get('img', '')
             if img_url:
                 st.markdown(f"<img src='{img_url}' class='profile-img'>", unsafe_allow_html=True)
