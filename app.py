@@ -8,110 +8,37 @@ import time
 # ---------- CONFIG ----------
 st.set_page_config(page_title="Corporate Portal", layout="wide", page_icon="🏢")
 
-# ---------- STYLES ----------
+# ---------- MINIMAL CSS (Only for spacing/colors, NO layout hacks) ----------
 st.markdown(
     """
     <style>
-    /* Global Background */
     .stApp { background-color: #f8f9fa; }
     
-    /* -----------------------------------------------------------
-       HOME PAGE DASHBOARD CARDS (Scoped CSS)
-       Targeting buttons ONLY inside columns to avoid breaking Sidebar/Forms
-    ----------------------------------------------------------- */
-    div[data-testid="column"] button {
-        height: 200px;
-        width: 100%;
-        border-radius: 12px;
-        background-color: #ffffff;
-        border: 1px solid #e5e7eb;
-        color: #1f2937;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-        
-        /* Typography for the Card Content */
-        white-space: pre-wrap; /* Allows \n to break lines */
-        font-size: 16px;
-        line-height: 1.6;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        text-align: center;
-    }
-
-    /* Hover Effect for Dashboard Cards */
-    div[data-testid="column"] button:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-        border-color: #3b82f6;
-        color: #3b82f6;
-    }
-
-    /* -----------------------------------------------------------
-       RESET / PROTECTION FOR OTHER BUTTONS
-       Ensures Sidebar and Form buttons stay normal
-    ----------------------------------------------------------- */
-    
-    /* Sidebar Buttons (Sign Out) - Reset to default look */
-    section[data-testid="stSidebar"] button {
-        height: auto !important;
-        background-color: transparent;
-        border: 1px solid #e5e7eb;
-        box-shadow: none;
-        color: inherit;
-    }
-    section[data-testid="stSidebar"] button:hover {
-        border-color: #ef4444; /* Red border for logout hover */
-        color: #ef4444;
-        transform: none;
-        box-shadow: none;
-    }
-
-    /* Form Buttons (Save, Update) - Reset to primary/secondary look */
-    div[data-testid="stForm"] button {
-        height: auto !important;
-        padding: 0.5rem 1rem;
-        transform: none !important;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    }
-
-    /* Navigation/Back Buttons (not in columns) */
-    div.stButton button {
-        /* Default fallback for buttons not in columns */
-    }
-
-    /* -----------------------------------------------------------
-       PROFILE IMAGES
-    ----------------------------------------------------------- */
+    /* Professional Profile Image in Sidebar */
     .profile-img {
-        width: 90px;
-        height: 90px;
+        width: 120px;
+        height: 120px;
         border-radius: 50%;
         object-fit: cover;
-        border: 3px solid #dfe6e9;
+        border: 4px solid #dfe6e9;
         display: block;
-        margin: 0 auto 10px auto;
+        margin: 0 auto 15px auto;
     }
-    .profile-name { text-align: center; font-weight: bold; font-size: 1.1em; color: #2d3436; margin: 0;}
-    .profile-role { text-align: center; font-size: 0.9em; color: #636e72; margin-bottom: 20px;}
     
-    /* -----------------------------------------------------------
-       EMOJI / ICON SIZING IN BUTTONS
-    ----------------------------------------------------------- */
-    /* There isn't a direct selector for text inside button, 
-       so we rely on the font-size in the button definition */
+    /* Slight padding adjustment for the main container */
+    .block-container { padding-top: 2rem; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # ---------- DATABASE & UTILS ----------
-DB_FILE = "portal_data_v4.db"
+DB_FILE = "portal_data_v5.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    # KPI Table
     c.execute('''CREATE TABLE IF NOT EXISTS tasks_v2 (
         id TEXT PRIMARY KEY, name_activity_pilot TEXT, task_name TEXT, date_of_receipt TEXT,
         actual_delivery_date TEXT, commitment_date_to_customer TEXT, status TEXT,
@@ -120,14 +47,17 @@ def init_db():
         date_of_clarity_in_input TEXT, start_date TEXT, otd_customer TEXT, customer_remarks TEXT,
         name_quality_gate_referent TEXT, project_lead TEXT, customer_manager_name TEXT
     )''')
+    # Training Repo
     c.execute('''CREATE TABLE IF NOT EXISTS training_repo (
         id TEXT PRIMARY KEY, title TEXT, description TEXT, link TEXT, 
         role_target TEXT, mandatory INTEGER, created_by TEXT
     )''')
+    # Training Progress
     c.execute('''CREATE TABLE IF NOT EXISTS training_progress (
         user_name TEXT, training_id TEXT, status TEXT, 
         last_updated TEXT, PRIMARY KEY (user_name, training_id)
     )''')
+    # Onboarding
     c.execute('''CREATE TABLE IF NOT EXISTS onboarding_tasks (
         id TEXT PRIMARY KEY, task_name TEXT, description TEXT
     )''')
@@ -256,67 +186,76 @@ def login_page():
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1, 1])
     with c2:
-        st.markdown("""
-        <div style='background:white; padding:30px; border-radius:15px; box-shadow:0 4px 15px rgba(0,0,0,0.05); text-align:center;'>
-            <h2 style='color:#111827;'>Portal Sign In</h2>
-            <p style='color:#6b7280; font-size:0.9rem;'>Enter your corporate credentials</p>
-        </div>
-        """, unsafe_allow_html=True)
-        st.write("")
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
-        if st.button("Secure Login", use_container_width=True, type="primary"):
-            if u in USERS and USERS[u]["password"] == p:
-                st.session_state.update({
-                    'logged_in': True, 'user': u, 
-                    'role': USERS[u]['role'], 'name': USERS[u]['name'],
-                    'img': USERS[u]['img'],
-                    'current_app': 'HOME'
-                })
-                st.rerun()
-            else:
-                st.error("Invalid credentials.")
+        with st.container(border=True):
+            st.markdown("<h2 style='text-align:center; color:#1f2937;'>Portal Sign In</h2>", unsafe_allow_html=True)
+            u = st.text_input("Username")
+            p = st.text_input("Password", type="password")
+            if st.button("Secure Login", use_container_width=True, type="primary"):
+                if u in USERS and USERS[u]["password"] == p:
+                    st.session_state.update({
+                        'logged_in': True, 'user': u, 
+                        'role': USERS[u]['role'], 'name': USERS[u]['name'],
+                        'img': USERS[u]['img'],
+                        'current_app': 'HOME'
+                    })
+                    st.rerun()
+                else:
+                    st.error("Invalid credentials.")
 
 # ---------- APP: HOME DASHBOARD ----------
 def app_home():
     st.markdown(f"## Welcome, {st.session_state['name']}")
-    st.markdown("Select a module to continue:")
-    st.write("")
+    st.caption("Select a module to continue")
+    st.write("---")
     
-    # 4 Columns for the 4 Actionable Cards
+    # Standard Streamlit Columns - The "Professional" Native Look
     c1, c2, c3, c4 = st.columns(4)
     
     with c1:
-        # Card 1: KPI System
-        # Using emoji as icon, \n for new lines to simulate Title and Description
-        if st.button("📊\n\nKPI System\n\nTrack OTD, FTR & Projects", key="home_kpi"):
-            st.session_state['current_app'] = 'KPI'
-            st.rerun()
+        with st.container(border=True):
+            st.markdown("### 📊")
+            st.markdown("**KPI System**")
+            st.caption("Manage OTD & FTR")
+            if st.button("Launch KPI", use_container_width=True, type="primary"):
+                st.session_state['current_app'] = 'KPI'
+                st.rerun()
 
     with c2:
-        # Card 2: Training
-        if st.button("🎓\n\nTraining Hub\n\nRepository & Progress", key="home_train"):
-            st.session_state['current_app'] = 'TRAINING'
-            st.rerun()
+        with st.container(border=True):
+            st.markdown("### 🎓")
+            st.markdown("**Training Hub**")
+            st.caption("Track Progress")
+            if st.button("Launch Training", use_container_width=True, type="primary"):
+                st.session_state['current_app'] = 'TRAINING'
+                st.rerun()
 
     with c3:
-        # Card 3: Onboarding
-        if st.button("🚀\n\nOnboarding\n\nNew Hire Checklist", key="home_onb"):
-            st.session_state['current_app'] = 'ONBOARDING'
-            st.rerun()
-            
+        with st.container(border=True):
+            st.markdown("### 🚀")
+            st.markdown("**Onboarding**")
+            st.caption("New Hire Setup")
+            if st.button("Launch Setup", use_container_width=True, type="primary"):
+                st.session_state['current_app'] = 'ONBOARDING'
+                st.rerun()
+
     with c4:
-        # Card 4: Skill Radar (Under Construction)
-        if st.button("🕸️\n\nSkill Radar\n\nCompetency Matrix", key="home_radar"):
-            st.toast("🚧 Skill Radar is currently under construction!", icon="👷")
-            time.sleep(1)
+        with st.container(border=True):
+            st.markdown("### 🕸️")
+            st.markdown("**Skill Radar**")
+            st.caption("Team Matrix")
+            if st.button("View Radar", use_container_width=True):
+                st.toast("🚧 Under Construction!", icon="👷")
 
 # ---------- APP: KPI SYSTEM ----------
 def app_kpi():
-    st.markdown("### 📊 KPI Management System")
-    if st.button("← Back to Dashboard"):
-        st.session_state['current_app'] = 'HOME'
-        st.rerun()
+    c1, c2 = st.columns([1, 6])
+    with c1:
+        if st.button("⬅ Home"):
+            st.session_state['current_app'] = 'HOME'
+            st.rerun()
+    with c2:
+        st.markdown("### 📊 KPI Management System")
+    
     st.markdown("---")
     
     if st.session_state['role'] == "Team Leader":
@@ -332,7 +271,7 @@ def app_kpi():
                 tname = c1.text_input("Task Name")
                 pilot = c2.selectbox("Assignee", [u['name'] for k,u in USERS.items() if u['role']=="Team Member"])
                 comm_date = c1.date_input("Deadline", min_value=date.today())
-                if st.form_submit_button("Assign Task"):
+                if st.form_submit_button("Assign Task", type="primary"):
                     save_kpi_task({'task_name':tname, 'name_activity_pilot':pilot, 'commitment_date_to_customer':str(comm_date), 'status':'Inprogress', 'start_date':str(date.today())})
                     st.success("Task Assigned.")
                     st.rerun()
@@ -352,7 +291,7 @@ def app_kpi():
                     with st.form(f"upd_{row['id']}"):
                         ns = st.selectbox("Update Status", ["Inprogress", "Completed", "Hold"])
                         ad = st.date_input("Completion Date", value=date.today())
-                        if st.form_submit_button("Update Progress"):
+                        if st.form_submit_button("Update Progress", type="primary"):
                             conn = sqlite3.connect(DB_FILE)
                             conn.execute("UPDATE tasks_v2 SET status=?, actual_delivery_date=? WHERE id=?", (ns, str(ad), row['id']))
                             conn.commit(); conn.close()
@@ -362,10 +301,13 @@ def app_kpi():
 
 # ---------- APP: TRAINING TRACKER ----------
 def app_training():
-    st.markdown("### 🎓 Training Tracker")
-    if st.button("← Back to Dashboard"):
-        st.session_state['current_app'] = 'HOME'
-        st.rerun()
+    c1, c2 = st.columns([1, 6])
+    with c1:
+        if st.button("⬅ Home"):
+            st.session_state['current_app'] = 'HOME'
+            st.rerun()
+    with c2:
+        st.markdown("### 🎓 Training Tracker")
     st.markdown("---")
 
     if st.session_state['role'] == "Team Leader":
@@ -380,7 +322,7 @@ def app_training():
                 td = st.text_area("Short Description")
                 tl = st.text_input("Content Link")
                 tm = st.checkbox("Mark as Mandatory")
-                if st.form_submit_button("Publish Module"):
+                if st.form_submit_button("Publish Module", type="primary"):
                     add_training(tt, td, tl, "All", tm, st.session_state['name'])
                     st.success("Published."); st.rerun()
     else:
@@ -392,32 +334,32 @@ def app_training():
         st.markdown("#### Assigned Modules")
         if df.empty: st.info("No training modules found.")
         else:
-            cols = st.columns(3)
+            # Native Grid
             for idx, row in df.iterrows():
-                with cols[idx % 3]:
-                    st.markdown(f"""
-                    <div style='background:white; padding:15px; border-radius:10px; border:1px solid #e5e7eb; height:100%; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
-                        <div style='font-weight:bold; color:#1f2937;'>{row['title']}</div>
-                        <div style='font-size:0.8rem; color:#6b7280; margin-bottom:10px;'>{row['description']}</div>
-                        <a href='{row['link']}' target='_blank' style='color:#3b82f6; text-decoration:none; font-size:0.9rem;'>▶ Access Content</a>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    st.write("")
-                    c_stat = row['status']
-                    n_stat = st.selectbox("Status", ["Not Started", "In Progress", "Completed"], 
-                                          index=["Not Started", "In Progress", "Completed"].index(c_stat), 
-                                          key=f"tr_{row['id']}", label_visibility="collapsed")
-                    if n_stat != c_stat:
-                        update_training_status(st.session_state['name'], row['id'], n_stat)
-                        st.rerun()
-                    st.markdown("---")
+                with st.container(border=True):
+                    c1, c2 = st.columns([3, 1])
+                    with c1:
+                        st.markdown(f"**{row['title']}**")
+                        st.caption(row['description'])
+                        st.markdown(f"[Access Content]({row['link']})")
+                    with c2:
+                        c_stat = row['status']
+                        n_stat = st.selectbox("Status", ["Not Started", "In Progress", "Completed"], 
+                                              index=["Not Started", "In Progress", "Completed"].index(c_stat), 
+                                              key=f"tr_{row['id']}", label_visibility="collapsed")
+                        if n_stat != c_stat:
+                            update_training_status(st.session_state['name'], row['id'], n_stat)
+                            st.rerun()
 
 # ---------- APP: ONBOARDING ----------
 def app_onboarding():
-    st.markdown("### 🚀 Onboarding Hub")
-    if st.button("← Back to Dashboard"):
-        st.session_state['current_app'] = 'HOME'
-        st.rerun()
+    c1, c2 = st.columns([1, 6])
+    with c1:
+        if st.button("⬅ Home"):
+            st.session_state['current_app'] = 'HOME'
+            st.rerun()
+    with c2:
+        st.markdown("### 🚀 Onboarding Hub")
     st.markdown("---")
 
     if st.session_state['role'] == "Team Leader":
@@ -426,7 +368,7 @@ def app_onboarding():
         with c1:
             with st.form("add_ob"):
                 t = st.text_input("Task Name"); d = st.text_input("Details")
-                if st.form_submit_button("Add Item"):
+                if st.form_submit_button("Add Item", type="primary"):
                     add_onboarding_task(t, d); st.success("Added"); st.rerun()
         with c2:
             conn = sqlite3.connect(DB_FILE)
@@ -440,19 +382,19 @@ def app_onboarding():
         else:
             comp = df['is_completed'].sum(); total = len(df)
             st.progress(comp/total, text=f"{int(comp)}/{total} Steps Completed")
-            st.markdown("<div style='background:white; padding:20px; border-radius:10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>", unsafe_allow_html=True)
-            for _, row in df.iterrows():
-                is_done = bool(row['is_completed'])
-                c1, c2 = st.columns([0.05, 0.95])
-                with c1:
-                    checked = st.checkbox("", value=is_done, key=f"ob_{row['id']}")
-                with c2:
-                    st.markdown(f"<div style='margin-top:5px; {'text-decoration:line-through; color:gray;' if is_done else 'font-weight:bold;'}'>{row['task_name']}</div>", unsafe_allow_html=True)
-                    if not is_done: st.caption(row['description'])
-                if checked != is_done:
-                    toggle_onboarding(st.session_state['name'], row['id'], checked)
-                    st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+            
+            with st.container(border=True):
+                for _, row in df.iterrows():
+                    is_done = bool(row['is_completed'])
+                    c1, c2 = st.columns([0.05, 0.95])
+                    with c1:
+                        checked = st.checkbox("", value=is_done, key=f"ob_{row['id']}")
+                    with c2:
+                        st.markdown(f"<div style='margin-top:5px; {'text-decoration:line-through; color:gray;' if is_done else 'font-weight:bold;'}'>{row['task_name']}</div>", unsafe_allow_html=True)
+                        if not is_done: st.caption(row['description'])
+                    if checked != is_done:
+                        toggle_onboarding(st.session_state['name'], row['id'], checked)
+                        st.rerun()
 
 # ---------- MAIN CONTROLLER ----------
 def main():
@@ -463,14 +405,14 @@ def main():
 
     if st.session_state['logged_in']:
         with st.sidebar:
-            # Professional Profile Image (Unsplash)
+            # Professional Profile Image
             img_url = st.session_state.get('img', '')
             if img_url:
                 st.markdown(f"<img src='{img_url}' class='profile-img'>", unsafe_allow_html=True)
             
-            st.markdown(f"<p class='profile-name'>{st.session_state.get('name','')}</p>", unsafe_allow_html=True)
-            st.markdown(f"<p class='profile-role'>{st.session_state.get('role','')}</p>", unsafe_allow_html=True)
-            
+            st.markdown(f"<h3 style='text-align:center;'>{st.session_state.get('name','')}</h3>", unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align:center; color:gray;'>{st.session_state.get('role','')}</p>", unsafe_allow_html=True)
+            st.markdown("---")
             if st.button("Sign Out", use_container_width=True):
                 st.session_state.clear()
                 st.rerun()
