@@ -176,6 +176,49 @@ def import_data_from_csv(file):
         st.error(f"Import Error: {e}")
         return False
 
+# --- MISSING PLOTLY FUNCTIONS RESTORED HERE ---
+def get_analytics_chart(df):
+    if df.empty: return go.Figure()
+    df_local = df.copy()
+    df_local['start_date'] = pd.to_datetime(df_local['start_date'], dayfirst=True, errors='coerce')
+    df_local = df_local.dropna(subset=['start_date'])
+    # Handle empty date column
+    if df_local.empty: return go.Figure()
+    
+    df_local['month'] = df_local['start_date'].dt.strftime('%b')
+    monthly = df_local.groupby(['month', 'status']).size().reset_index(name='count')
+    fig = px.bar(monthly, x='month', y='count', color='status', barmode='group',
+                 color_discrete_map={"Completed":"#10b981","Inprogress":"#3b82f6","Hold":"#ef4444","Cancelled":"#9ca3af"})
+    fig.update_layout(margin=dict(l=0,r=0,t=10,b=0), height=300)
+    return fig
+
+def get_donut(df):
+    if df.empty: return go.Figure()
+    total = len(df)
+    completed = len(df[df['status']=='Completed'])
+    completed_pct = int((completed/total)*100) if total>0 else 0
+    fig = go.Figure(data=[go.Pie(labels=['Completed','Pending'], values=[completed_pct, 100-completed_pct], hole=.7, textinfo='none')])
+    fig.update_layout(height=240, margin=dict(l=0,r=0,t=0,b=0), 
+                      annotations=[dict(text=f"{completed_pct}%", x=0.5, y=0.5, showarrow=False, font=dict(size=20))])
+    return fig
+
+def get_ftr_otd_chart(df):
+    if df.empty: return go.Figure()
+    df_local = df.copy()
+    df_local['actual_delivery_date'] = pd.to_datetime(df_local['actual_delivery_date'], dayfirst=True, errors='coerce')
+    df_local = df_local.dropna(subset=['actual_delivery_date'])
+    if df_local.empty: return go.Figure()
+    df_local['month'] = df_local['actual_delivery_date'].dt.strftime('%b')
+    monthly_stats = df_local.groupby('month').agg({
+        'otd_internal': lambda x: ((x=='OK') | (x=='Yes')).mean()*100,
+        'ftr_internal': lambda x: (x=='Yes').mean()*100
+    }).reset_index()
+    fig = go.Figure()
+    fig.add_bar(x=monthly_stats['month'], y=monthly_stats['ftr_internal'], name='FTR %', marker_color='#8e44ad')
+    fig.add_bar(x=monthly_stats['month'], y=monthly_stats['otd_internal'], name='OTD %', marker_color='#2980b9')
+    fig.update_layout(barmode='group', height=300, margin=dict(l=0,r=0,t=10,b=0))
+    return fig
+
 # --- Training / Onboarding Logic ---
 def add_training(title, desc, link, role, mandatory, creator):
     conn = sqlite3.connect(DB_FILE)
@@ -569,7 +612,7 @@ def app_onboarding():
                         toggle_onboarding(st.session_state['name'], row['id'], checked)
                         st.rerun()
 
-# ---------- MAIN ----------
+# ---------- MAIN CONTROLLER ----------
 def main():
     init_db()
     if 'logged_in' not in st.session_state:
