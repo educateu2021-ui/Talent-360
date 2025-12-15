@@ -3,8 +3,6 @@ import pandas as pd
 import sqlite3
 import uuid
 from datetime import date, datetime, timedelta
-import plotly.express as px
-import plotly.graph_objects as go
 import time
 
 # ---------- CONFIG ----------
@@ -17,67 +15,99 @@ st.markdown(
     /* Global Background */
     .stApp { background-color: #f8f9fa; }
     
-    /* TRANSFORM BUTTONS INTO CARDS 
-       This CSS targets the buttons inside the columns to look like cards 
-    */
-    div.stButton > button {
-        height: 220px;              /* Fixed height for uniformity */
-        width: 100%;                /* Full width of the column */
-        border-radius: 15px;
+    /* -----------------------------------------------------------
+       HOME PAGE DASHBOARD CARDS (Scoped CSS)
+       Targeting buttons ONLY inside columns to avoid breaking Sidebar/Forms
+    ----------------------------------------------------------- */
+    div[data-testid="column"] button {
+        height: 200px;
+        width: 100%;
+        border-radius: 12px;
         background-color: #ffffff;
         border: 1px solid #e5e7eb;
-        color: #1f2937;             /* Dark text */
+        color: #1f2937;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        transition: all 0.3s ease;
+        transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
         
-        /* Flexbox for centering content vertically */
+        /* Typography for the Card Content */
+        white-space: pre-wrap; /* Allows \n to break lines */
+        font-size: 16px;
+        line-height: 1.6;
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
         text-align: center;
-        
-        /* Typography overrides for the button label */
-        font-size: 16px;
-        white-space: pre-wrap;      /* Allows new lines (\n) in button text */
-        line-height: 1.5;
     }
 
-    /* Hover Effect */
-    div.stButton > button:hover {
-        transform: translateY(-7px);
-        box-shadow: 0 12px 25px rgba(0,0,0,0.1);
-        border-color: #3b82f6;      /* Blue border on hover */
-        color: #3b82f6;             /* Blue text on hover */
-        background-color: #ffffff;
+    /* Hover Effect for Dashboard Cards */
+    div[data-testid="column"] button:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        border-color: #3b82f6;
+        color: #3b82f6;
     }
 
-    /* Active (Click) Effect */
-    div.stButton > button:active {
-        background-color: #f3f4f6;
-        transform: translateY(-2px);
-    }
+    /* -----------------------------------------------------------
+       RESET / PROTECTION FOR OTHER BUTTONS
+       Ensures Sidebar and Form buttons stay normal
+    ----------------------------------------------------------- */
     
-    /* Sidebar Profile Image Styling */
-    .profile-container {
-        display: flex;
-        justify-content: center;
-        margin-bottom: 15px;
+    /* Sidebar Buttons (Sign Out) - Reset to default look */
+    section[data-testid="stSidebar"] button {
+        height: auto !important;
+        background-color: transparent;
+        border: 1px solid #e5e7eb;
+        box-shadow: none;
+        color: inherit;
     }
+    section[data-testid="stSidebar"] button:hover {
+        border-color: #ef4444; /* Red border for logout hover */
+        color: #ef4444;
+        transform: none;
+        box-shadow: none;
+    }
+
+    /* Form Buttons (Save, Update) - Reset to primary/secondary look */
+    div[data-testid="stForm"] button {
+        height: auto !important;
+        padding: 0.5rem 1rem;
+        transform: none !important;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    /* Navigation/Back Buttons (not in columns) */
+    div.stButton button {
+        /* Default fallback for buttons not in columns */
+    }
+
+    /* -----------------------------------------------------------
+       PROFILE IMAGES
+    ----------------------------------------------------------- */
     .profile-img {
-        width: 100px; 
-        height: 100px; 
-        object-fit: cover; 
-        border-radius: 50%; 
-        border: 3px solid #e5e7eb;
+        width: 90px;
+        height: 90px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 3px solid #dfe6e9;
+        display: block;
+        margin: 0 auto 10px auto;
     }
+    .profile-name { text-align: center; font-weight: bold; font-size: 1.1em; color: #2d3436; margin: 0;}
+    .profile-role { text-align: center; font-size: 0.9em; color: #636e72; margin-bottom: 20px;}
+    
+    /* -----------------------------------------------------------
+       EMOJI / ICON SIZING IN BUTTONS
+    ----------------------------------------------------------- */
+    /* There isn't a direct selector for text inside button, 
+       so we rely on the font-size in the button definition */
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# ---------- DATABASE & UTILS (Logic Unchanged) ----------
-DB_FILE = "portal_data_v3.db"
+# ---------- DATABASE & UTILS ----------
+DB_FILE = "portal_data_v4.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -108,7 +138,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- Helpers ---
+# --- Logic Helpers ---
 def get_kpi_data():
     conn = sqlite3.connect(DB_FILE)
     try: df = pd.read_sql_query("SELECT * FROM tasks_v2", conn)
@@ -249,40 +279,37 @@ def login_page():
 
 # ---------- APP: HOME DASHBOARD ----------
 def app_home():
-    st.markdown(f"## Hello, {st.session_state['name']}")
-    st.markdown("Access your operational modules below.")
+    st.markdown(f"## Welcome, {st.session_state['name']}")
+    st.markdown("Select a module to continue:")
     st.write("")
     
-    # 4 Columns Layout
+    # 4 Columns for the 4 Actionable Cards
     c1, c2, c3, c4 = st.columns(4)
     
-    # NOTE: The "\n" in the button labels are handled by the 'white-space: pre-wrap' CSS above.
-    # This makes the button serve as the entire card.
-    
     with c1:
-        # Module 1: KPI
-        # We use a large emoji/icon and text inside the button label
-        if st.button("📊\n\nKPI System\n\nTrack Projects & OTD", use_container_width=True, key="btn_kpi"):
+        # Card 1: KPI System
+        # Using emoji as icon, \n for new lines to simulate Title and Description
+        if st.button("📊\n\nKPI System\n\nTrack OTD, FTR & Projects", key="home_kpi"):
             st.session_state['current_app'] = 'KPI'
             st.rerun()
 
     with c2:
-        # Module 2: Training
-        if st.button("🎓\n\nTraining Hub\n\nUpskill & Learn", use_container_width=True, key="btn_train"):
+        # Card 2: Training
+        if st.button("🎓\n\nTraining Hub\n\nRepository & Progress", key="home_train"):
             st.session_state['current_app'] = 'TRAINING'
             st.rerun()
 
     with c3:
-        # Module 3: Onboarding
-        if st.button("🚀\n\nOnboarding\n\nNew Hire Setup", use_container_width=True, key="btn_onb"):
+        # Card 3: Onboarding
+        if st.button("🚀\n\nOnboarding\n\nNew Hire Checklist", key="home_onb"):
             st.session_state['current_app'] = 'ONBOARDING'
             st.rerun()
-
+            
     with c4:
-        # Module 4: Skill Radar (Under Construction)
-        if st.button("🕸️\n\nSkill Radar\n\nCompetency Matrix", use_container_width=True, key="btn_radar"):
+        # Card 4: Skill Radar (Under Construction)
+        if st.button("🕸️\n\nSkill Radar\n\nCompetency Matrix", key="home_radar"):
             st.toast("🚧 Skill Radar is currently under construction!", icon="👷")
-            time.sleep(1) # Small delay for visual feedback
+            time.sleep(1)
 
 # ---------- APP: KPI SYSTEM ----------
 def app_kpi():
@@ -307,7 +334,7 @@ def app_kpi():
                 comm_date = c1.date_input("Deadline", min_value=date.today())
                 if st.form_submit_button("Assign Task"):
                     save_kpi_task({'task_name':tname, 'name_activity_pilot':pilot, 'commitment_date_to_customer':str(comm_date), 'status':'Inprogress', 'start_date':str(date.today())})
-                    st.success("Task Assigned successfully.")
+                    st.success("Task Assigned.")
                     st.rerun()
         
         if not df.empty:
@@ -436,18 +463,14 @@ def main():
 
     if st.session_state['logged_in']:
         with st.sidebar:
-            # Professional Profile Image (Rounded)
+            # Professional Profile Image (Unsplash)
             img_url = st.session_state.get('img', '')
             if img_url:
-                st.markdown(f"""
-                <div class="profile-container">
-                    <img src='{img_url}' class="profile-img">
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f"<img src='{img_url}' class='profile-img'>", unsafe_allow_html=True)
             
-            st.markdown(f"<h3 style='text-align:center; margin:0;'>{st.session_state.get('name','')}</h3>", unsafe_allow_html=True)
-            st.markdown(f"<p style='text-align:center; color:gray; font-size:0.9rem;'>{st.session_state.get('role','')}</p>", unsafe_allow_html=True)
-            st.markdown("---")
+            st.markdown(f"<p class='profile-name'>{st.session_state.get('name','')}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p class='profile-role'>{st.session_state.get('role','')}</p>", unsafe_allow_html=True)
+            
             if st.button("Sign Out", use_container_width=True):
                 st.session_state.clear()
                 st.rerun()
