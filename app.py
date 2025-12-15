@@ -52,7 +52,7 @@ st.markdown(
 )
 
 # ---------- DATABASE ----------
-DB_FILE = "portal_data_final.db"
+DB_FILE = "portal_data_final_v2.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -87,6 +87,20 @@ def init_db():
         PRIMARY KEY (user_name, task_id)
     )''')
     
+    # --- DUMMY DATA GENERATION ---
+    # Check if training repo is empty, if so, add dummy data
+    c.execute("SELECT count(*) FROM training_repo")
+    if c.fetchone()[0] == 0:
+        dummy_trainings = [
+            ("TR-001", "Python for Data Science", "Intro to Pandas & Streamlit", "https://python.org", "All", 1, "System"),
+            ("TR-002", "Workplace Safety 101", "Fire safety and evacuation protocols", "https://safety.com", "All", 1, "System"),
+            ("TR-003", "Advanced Leadership", "Managing high-performance teams", "https://hbr.org", "Team Leader", 0, "System"),
+            ("TR-004", "Git & Version Control", "Branching strategies and PRs", "https://github.com", "Team Member", 1, "System"),
+            ("TR-005", "Agile Methodologies", "Scrum vs Kanban breakdown", "https://agilealliance.org", "All", 0, "System")
+        ]
+        c.executemany("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)", dummy_trainings)
+        print("Dummy training data added.")
+
     conn.commit()
     conn.close()
 
@@ -141,7 +155,7 @@ def save_kpi_task(data, task_id=None):
     conn.commit()
     conn.close()
 
-def import_data_from_csv(file):
+def import_kpi_csv(file):
     try:
         df = pd.read_csv(file)
         if 'id' not in df.columns:
@@ -176,13 +190,99 @@ def import_data_from_csv(file):
         st.error(f"Import Error: {e}")
         return False
 
-# --- MISSING PLOTLY FUNCTIONS RESTORED HERE ---
+# --- Training Logic with Import/Export ---
+def add_training(title, desc, link, role, mandatory, creator):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    tid = str(uuid.uuid4())[:8]
+    c.execute("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)", 
+              (tid, title, desc, link, role, 1 if mandatory else 0, creator))
+    conn.commit()
+    conn.close()
+
+def get_trainings(user_name=None):
+    conn = sqlite3.connect(DB_FILE)
+    repo = pd.read_sql_query("SELECT * FROM training_repo", conn)
+    if user_name:
+        prog = pd.read_sql_query("SELECT * FROM training_progress WHERE user_name=?", conn, params=(user_name,))
+        if not repo.empty:
+            merged = pd.merge(repo, prog, left_on='id', right_on='training_id', how='left')
+            merged['status'] = merged['status'].fillna('Not Started')
+            conn.close()
+            return merged
+    conn.close()
+    return repo
+
+def update_training_status(user_name, training_id, status):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO training_progress VALUES (?,?,?,?)", 
+              (user_name, training_id, status, str(date.today())))
+    conn.commit()
+    conn.close()
+
+def import_training_csv(file):
+    try:
+        df = pd.read_csv(file)
+        # Required columns: title, description, link, role_target, mandatory
+        req = ['title', 'description', 'link', 'role_target', 'mandatory']
+        if not all(col in df.columns for col in req):
+            st.error(f"CSV missing columns. Required: {req}")
+            return False
+            
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        
+        count = 0
+        for _, row in df.iterrows():
+            tid = str(uuid.uuid4())[:8]
+            c.execute("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)", 
+                      (tid, row['title'], row['description'], row['link'], 
+                       row['role_target'], int(row['mandatory']), st.session_state['name']))
+            count += 1
+            
+        conn.commit()
+        conn.close()
+        st.success(f"Successfully imported {count} modules!")
+        return True
+    except Exception as e:
+        st.error(f"Training Import Error: {e}")
+        return False
+
+# --- Onboarding Logic ---
+def add_onboarding_task(name, desc):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    tid = str(uuid.uuid4())[:8]
+    c.execute("INSERT INTO onboarding_tasks VALUES (?,?,?)", (tid, name, desc))
+    conn.commit()
+    conn.close()
+
+def get_onboarding_status(user_name):
+    conn = sqlite3.connect(DB_FILE)
+    tasks = pd.read_sql_query("SELECT * FROM onboarding_tasks", conn)
+    prog = pd.read_sql_query("SELECT * FROM onboarding_progress WHERE user_name=?", conn, params=(user_name,))
+    if tasks.empty:
+        conn.close(); return pd.DataFrame()
+    merged = pd.merge(tasks, prog, left_on='id', right_on='task_id', how='left')
+    merged['is_completed'] = merged['is_completed'].fillna(0)
+    conn.close()
+    return merged
+
+def toggle_onboarding(user_name, task_id, checked):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    val = 1 if checked else 0
+    c.execute("INSERT OR REPLACE INTO onboarding_progress VALUES (?,?,?)", (user_name, task_id, val))
+    conn.commit()
+    conn.close()
+
+# --- PLOTLY HELPERS ---
 def get_analytics_chart(df):
     if df.empty: return go.Figure()
     df_local = df.copy()
     df_local['start_date'] = pd.to_datetime(df_local['start_date'], dayfirst=True, errors='coerce')
     df_local = df_local.dropna(subset=['start_date'])
-    # Handle empty date column
     if df_local.empty: return go.Figure()
     
     df_local['month'] = df_local['start_date'].dt.strftime('%b')
@@ -219,64 +319,6 @@ def get_ftr_otd_chart(df):
     fig.update_layout(barmode='group', height=300, margin=dict(l=0,r=0,t=10,b=0))
     return fig
 
-# --- Training / Onboarding Logic ---
-def add_training(title, desc, link, role, mandatory, creator):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    tid = str(uuid.uuid4())[:8]
-    c.execute("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)", 
-              (tid, title, desc, link, role, 1 if mandatory else 0, creator))
-    conn.commit()
-    conn.close()
-
-def get_trainings(user_name=None):
-    conn = sqlite3.connect(DB_FILE)
-    repo = pd.read_sql_query("SELECT * FROM training_repo", conn)
-    if user_name:
-        prog = pd.read_sql_query("SELECT * FROM training_progress WHERE user_name=?", conn, params=(user_name,))
-        if not repo.empty:
-            merged = pd.merge(repo, prog, left_on='id', right_on='training_id', how='left')
-            merged['status'] = merged['status'].fillna('Not Started')
-            conn.close()
-            return merged
-    conn.close()
-    return repo
-
-def update_training_status(user_name, training_id, status):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO training_progress VALUES (?,?,?,?)", 
-              (user_name, training_id, status, str(date.today())))
-    conn.commit()
-    conn.close()
-
-def add_onboarding_task(name, desc):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    tid = str(uuid.uuid4())[:8]
-    c.execute("INSERT INTO onboarding_tasks VALUES (?,?,?)", (tid, name, desc))
-    conn.commit()
-    conn.close()
-
-def get_onboarding_status(user_name):
-    conn = sqlite3.connect(DB_FILE)
-    tasks = pd.read_sql_query("SELECT * FROM onboarding_tasks", conn)
-    prog = pd.read_sql_query("SELECT * FROM onboarding_progress WHERE user_name=?", conn, params=(user_name,))
-    if tasks.empty:
-        conn.close(); return pd.DataFrame()
-    merged = pd.merge(tasks, prog, left_on='id', right_on='task_id', how='left')
-    merged['is_completed'] = merged['is_completed'].fillna(0)
-    conn.close()
-    return merged
-
-def toggle_onboarding(user_name, task_id, checked):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    val = 1 if checked else 0
-    c.execute("INSERT OR REPLACE INTO onboarding_progress VALUES (?,?,?)", (user_name, task_id, val))
-    conn.commit()
-    conn.close()
-
 # ---------- AUTH ----------
 USERS = {
     "leader": {"password": "123", "role": "Team Leader", "name": "Sarah Jenkins", "img": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200&h=200"},
@@ -309,7 +351,6 @@ def app_home():
     st.caption("Select a module below to begin.")
     st.write("---")
     
-    # STABLE LAYOUT: 4 Columns (Stacks on mobile naturally)
     c1, c2, c3, c4 = st.columns(4)
     
     with c1:
@@ -347,14 +388,13 @@ def app_home():
             if st.button("View Radar", use_container_width=True):
                 st.toast("🚧 Under Construction!", icon="👷")
 
-# --- KPI APP (Fixed) ---
+# --- KPI APP ---
 def parse_date(d):
     if not d or d == 'None': return None
     try: return pd.to_datetime(d).date()
     except: return None
 
 def app_kpi():
-    # Navigation
     c1, c2 = st.columns([1, 6])
     with c1:
         if st.button("⬅ Home", use_container_width=True):
@@ -364,7 +404,6 @@ def app_kpi():
         st.markdown("### 📊 KPI Management System")
     st.markdown("---")
     
-    # TEAM LEADER VIEW
     if st.session_state['role'] == "Team Leader":
         df = get_kpi_data()
         
@@ -372,13 +411,12 @@ def app_kpi():
         if 'edit_kpi_id' not in st.session_state:
             st.session_state['edit_kpi_id'] = None
 
-        # 2. EDITOR SECTION (Appears at top if editing/creating)
+        # 2. EDITOR SECTION
         if st.session_state['edit_kpi_id']:
             with st.container(border=True):
                 is_new = st.session_state['edit_kpi_id'] == 'NEW'
                 st.subheader("Create Task" if is_new else "Edit Task")
                 
-                # Load default data if editing
                 default_data = {}
                 if not is_new:
                     task_row = df[df['id'] == st.session_state['edit_kpi_id']]
@@ -423,7 +461,7 @@ def app_kpi():
                                 "start_date": str(start_d), "commitment_date_to_customer": str(comm_d),
                                 "actual_delivery_date": str(act_d), "description_of_activity": desc,
                                 "reference_part_number": ref_part, "ftr_internal": ftr, "customer_remarks": rem,
-                                "date_of_receipt": str(date.today()), "activity_type": "Standard" # Defaults
+                                "date_of_receipt": str(date.today()), "activity_type": "Standard"
                             }
                             save_kpi_task(payload, None if is_new else st.session_state['edit_kpi_id'])
                             st.success("Saved successfully!")
@@ -435,22 +473,20 @@ def app_kpi():
                     st.rerun()
             st.markdown("---")
 
-        # 3. DASHBOARD VIEW (Shown when not editing)
+        # 3. DASHBOARD VIEW
         if not st.session_state['edit_kpi_id']:
-            # Metrics
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Tasks", len(df))
             m2.metric("In Progress", len(df[df['status']=='Inprogress']) if not df.empty else 0)
             m3.metric("On Hold", len(df[df['status']=='Hold']) if not df.empty else 0)
             m4.metric("Completed", len(df[df['status']=='Completed']) if not df.empty else 0)
             
-            # Toolbar
             tb1, tb2 = st.columns([3, 1])
             with tb1:
                 with st.expander("📂 CSV Import/Export"):
                     up = st.file_uploader("Import CSV", type=['csv'])
                     if up:
-                        if import_data_from_csv(up): st.success("Imported!")
+                        if import_kpi_csv(up): st.success("Imported!")
                         st.rerun()
                     if not df.empty:
                         st.download_button("Export CSV", data=df.to_csv(index=False).encode('utf-8'), file_name="kpi.csv", mime="text/csv")
@@ -459,7 +495,6 @@ def app_kpi():
                     st.session_state['edit_kpi_id'] = "NEW"
                     st.rerun()
 
-            # Charts
             c_chart, c_donut = st.columns([2, 1])
             if not df.empty:
                 with c_chart:
@@ -467,7 +502,6 @@ def app_kpi():
                 with c_donut:
                     st.plotly_chart(get_donut(df), use_container_width=True)
             
-            # Task List
             st.markdown("#### Active Tasks")
             if not df.empty:
                 for idx, row in df.iterrows():
@@ -487,7 +521,6 @@ def app_kpi():
             else:
                 st.info("No tasks found.")
 
-    # TEAM MEMBER VIEW
     else:
         df = get_kpi_data()
         my_tasks = df[df['name_activity_pilot'] == st.session_state['name']]
@@ -509,7 +542,6 @@ def app_kpi():
                         ad = c2.date_input("Actual Delivery", value=parse_date(row.get('actual_delivery_date')) or date.today())
                         
                         if st.form_submit_button("Update", type="primary"):
-                            # Simple update logic
                             conn = sqlite3.connect(DB_FILE)
                             conn.execute("UPDATE tasks_v2 SET status=?, actual_delivery_date=? WHERE id=?", (ns, str(ad), row['id']))
                             conn.commit()
@@ -517,6 +549,7 @@ def app_kpi():
                             st.success("Updated!")
                             st.rerun()
 
+# --- TRAINING APP (Added Import/Export) ---
 def app_training():
     c1, c2 = st.columns([1, 6])
     with c1:
@@ -528,12 +561,30 @@ def app_training():
     st.markdown("---")
 
     if st.session_state['role'] == "Team Leader":
-        tabs = st.tabs(["Repository", "Add New"])
-        with tabs[0]:
+        # Tabs for better organization
+        t1, t2 = st.tabs(["Repository", "Add New"])
+        
+        with t1:
             df = get_trainings()
-            if not df.empty: st.dataframe(df, use_container_width=True)
-            else: st.info("Repository empty.")
-        with tabs[1]:
+            
+            # --- New: Export/Import for Training ---
+            with st.expander("📂 Import / Export Training CSV"):
+                col_imp, col_exp = st.columns(2)
+                with col_imp:
+                    up_train = st.file_uploader("Upload Training CSV", type=['csv'])
+                    if up_train:
+                        if import_training_csv(up_train): st.rerun()
+                with col_exp:
+                    if not df.empty:
+                        csv = df.to_csv(index=False).encode('utf-8')
+                        st.download_button("Download CSV", data=csv, file_name="training_repo.csv", mime="text/csv")
+
+            if not df.empty:
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.info("Repository empty.")
+                
+        with t2:
             with st.form("add_training_form"):
                 tt = st.text_input("Title")
                 td = st.text_area("Desc")
@@ -560,7 +611,6 @@ def app_training():
                         st.markdown(f"[{row['link']}]({row['link']})")
                     with c2:
                         c_stat = row['status']
-                        # Unique key is crucial here
                         n_stat = st.selectbox("Status", ["Not Started", "In Progress", "Completed"], 
                                               index=["Not Started", "In Progress", "Completed"].index(c_stat), 
                                               key=f"tr_stat_{row['id']}", label_visibility="collapsed")
