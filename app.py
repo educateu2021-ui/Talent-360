@@ -78,11 +78,11 @@ def init_db():
         last_updated TEXT, PRIMARY KEY (user_name, training_id)
     )''')
     
-    # Employee Database Tables
-    c.execute('''CREATE TABLE IF NOT EXISTS Employee Database_tasks (
+    # Onboarding Tables
+    c.execute('''CREATE TABLE IF NOT EXISTS onboarding_tasks (
         id TEXT PRIMARY KEY, task_name TEXT, description TEXT
     )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS Employee Database_progress (
+    c.execute('''CREATE TABLE IF NOT EXISTS onboarding_progress (
         user_name TEXT, task_id TEXT, is_completed INTEGER,
         PRIMARY KEY (user_name, task_id)
     )''')
@@ -249,19 +249,19 @@ def import_training_csv(file):
         st.error(f"Training Import Error: {e}")
         return False
 
-# --- Employee Database Logic ---
-def add_Employee Database_task(name, desc):
+# --- Onboarding Logic ---
+def add_onboarding_task(name, desc):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     tid = str(uuid.uuid4())[:8]
-    c.execute("INSERT INTO Employee Database_tasks VALUES (?,?,?)", (tid, name, desc))
+    c.execute("INSERT INTO onboarding_tasks VALUES (?,?,?)", (tid, name, desc))
     conn.commit()
     conn.close()
 
-def get_Employee Database_status(user_name):
+def get_onboarding_status(user_name):
     conn = sqlite3.connect(DB_FILE)
-    tasks = pd.read_sql_query("SELECT * FROM Employee Database_tasks", conn)
-    prog = pd.read_sql_query("SELECT * FROM Employee Database_progress WHERE user_name=?", conn, params=(user_name,))
+    tasks = pd.read_sql_query("SELECT * FROM onboarding_tasks", conn)
+    prog = pd.read_sql_query("SELECT * FROM onboarding_progress WHERE user_name=?", conn, params=(user_name,))
     if tasks.empty:
         conn.close(); return pd.DataFrame()
     merged = pd.merge(tasks, prog, left_on='id', right_on='task_id', how='left')
@@ -269,11 +269,11 @@ def get_Employee Database_status(user_name):
     conn.close()
     return merged
 
-def toggle_Employee Database(user_name, task_id, checked):
+def toggle_onboarding(user_name, task_id, checked):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     val = 1 if checked else 0
-    c.execute("INSERT OR REPLACE INTO Employee Database_progress VALUES (?,?,?)", (user_name, task_id, val))
+    c.execute("INSERT OR REPLACE INTO onboarding_progress VALUES (?,?,?)", (user_name, task_id, val))
     conn.commit()
     conn.close()
 
@@ -374,10 +374,10 @@ def app_home():
     with c3:
         with st.container(border=True):
             st.markdown("### 🚀")
-            st.markdown("**Employee Database**")
+            st.markdown("**Onboarding**")
             st.caption("New Hire Setup")
             if st.button("Launch Setup", use_container_width=True, type="primary"):
-                st.session_state['current_app'] = 'Employee Database'
+                st.session_state['current_app'] = 'ONBOARDING'
                 st.rerun()
 
     with c4:
@@ -618,14 +618,14 @@ def app_training():
                             update_training_status(st.session_state['name'], row['id'], n_stat)
                             st.rerun()
 
-def app_Employee Database():
+def app_onboarding():
     c1, c2 = st.columns([1, 6])
     with c1:
         if st.button("⬅ Home", use_container_width=True):
             st.session_state['current_app'] = 'HOME'
             st.rerun()
     with c2:
-        st.markdown("### 🚀 Employee Database")
+        st.markdown("### 🚀 Onboarding")
     st.markdown("---")
 
     if st.session_state['role'] == "Team Leader":
@@ -635,15 +635,15 @@ def app_Employee Database():
             with st.form("add_ob_form"):
                 t = st.text_input("Task"); d = st.text_input("Details")
                 if st.form_submit_button("Add", type="primary", use_container_width=True):
-                    add_Employee Database_task(t, d); st.success("Added"); st.rerun()
+                    add_onboarding_task(t, d); st.success("Added"); st.rerun()
         with c2:
             conn = sqlite3.connect(DB_FILE)
-            tasks = pd.read_sql_query("SELECT * FROM Employee Database_tasks", conn)
+            tasks = pd.read_sql_query("SELECT * FROM onboarding_tasks", conn)
             conn.close()
             if not tasks.empty: st.dataframe(tasks, use_container_width=True)
     else:
         st.markdown(f"#### Checklist")
-        df = get_Employee Database_status(st.session_state['name'])
+        df = get_onboarding_status(st.session_state['name'])
         if df.empty: st.info("No checklist.")
         else:
             comp = df['is_completed'].sum(); total = len(df)
@@ -659,7 +659,7 @@ def app_Employee Database():
                         st.markdown(f"<div style='margin-top:5px; {'text-decoration:line-through; color:gray;' if is_done else 'font-weight:bold;'}'>{row['task_name']}</div>", unsafe_allow_html=True)
                         if not is_done: st.caption(row['description'])
                     if checked != is_done:
-                        toggle_Employee Database(st.session_state['name'], row['id'], checked)
+                        toggle_onboarding(st.session_state['name'], row['id'], checked)
                         st.rerun()
 
 # ---------- MAIN CONTROLLER ----------
@@ -689,7 +689,7 @@ def main():
         if app == 'HOME': app_home()
         elif app == 'KPI': app_kpi()
         elif app == 'TRAINING': app_training()
-        elif app == 'Employee Database': app_Employee Database()
+        elif app == 'ONBOARDING': app_onboarding()
 
 if __name__ == "__main__":
     main()
