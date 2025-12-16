@@ -627,16 +627,12 @@ def app_training():
     st.markdown("---")
     
     # PERMISSION: Lead or Admin
-    if st.session_state['role'] == "Team Leader":
+    if st.session_state['role'] in ["Team Leader", "Super Admin"]:
         t1, t2 = st.tabs(["Repository", "Add New"])
         with t1:
             df = get_trainings()
             with st.expander("📂 Import / Export"):
-                col_imp, col_exp = st.columns(2)
-                with col_imp:
-                    up_train = st.file_uploader("Upload CSV", type=['csv'])
-                    if up_train:
-                        if import_training_csv(up_train): st.rerun()
+                col_exp, _ = st.columns(2)
                 with col_exp:
                     if not df.empty:
                         csv = df.to_csv(index=False).encode('utf-8')
@@ -670,8 +666,8 @@ def app_training():
                     with c2:
                         c_stat = row['status']
                         n_stat = st.selectbox("Status", ["Not Started", "In Progress", "Completed"], 
-                                                index=["Not Started", "In Progress", "Completed"].index(c_stat), 
-                                                key=f"tr_stat_{row['id']}", label_visibility="collapsed")
+                                              index=["Not Started", "In Progress", "Completed"].index(c_stat), 
+                                              key=f"tr_stat_{row['id']}", label_visibility="collapsed")
                         if n_stat != c_stat:
                             update_training_status(st.session_state['name'], row['id'], n_stat); st.rerun()
 
