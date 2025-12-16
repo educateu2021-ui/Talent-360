@@ -57,23 +57,88 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ---------- DATABASE ----------
+# ---------- DATABASE & SEEDING ----------
 DB_FILE = "portal_data_final_v16_admin.db"
+
+def seed_data(c):
+    """Generates 20 items of demo data for all modules if tables are empty."""
+    
+    # 1. SEED USERS (20 Users)
+    c.execute("SELECT count(*) FROM users")
+    if c.fetchone()[0] == 0:
+        # Fixed Admin
+        c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
+                  ("admin", "admin123", "Super Admin", "System Admin", "ADM-000", "https://cdn-icons-png.flaticon.com/512/3135/3135715.png", str(date.today())))
+        
+        roles = ["Team Leader"] * 4 + ["Team Member"] * 16
+        first_names = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Elizabeth", "David", "Barbara", "Richard", "Susan", "Joseph", "Jessica", "Thomas", "Sarah", "Charles", "Karen"]
+        
+        for i, name in enumerate(first_names):
+            username = name.lower()
+            role = roles[i]
+            c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
+                      (username, "123", role, f"{name} Smith", f"EMP-{100+i}", f"https://ui-avatars.com/api/?name={name}+Smith&background=random", str(date.today())))
+
+    # 2. SEED KPI TASKS (20 Tasks)
+    c.execute("SELECT count(*) FROM tasks_v2")
+    if c.fetchone()[0] == 0:
+        c.execute("SELECT name FROM users WHERE role='Team Member'")
+        pilots = [row[0] for row in c.fetchall()]
+        if not pilots: pilots = ["Demo User"]
+
+        for i in range(1, 21):
+            pilot = random.choice(pilots)
+            status = random.choice(["Completed", "Inprogress", "Hold", "Cancelled"])
+            start = date.today() - timedelta(days=random.randint(10, 60))
+            due = start + timedelta(days=random.randint(5, 20))
+            
+            actual = ""
+            otd = "N/A"
+            if status == "Completed":
+                delay = random.choice([-2, -1, 0, 1, 5])
+                actual_dt = due + timedelta(days=delay)
+                actual = str(actual_dt)
+                otd = "OK" if actual_dt <= due else "NOT OK"
+
+            c.execute("INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                      (str(uuid.uuid4())[:8], pilot, f"Project Task {i:02d}", str(start), actual, str(due),
+                       status, "Yes", f"REF-{1000+i}", "Yes", otd, 
+                       f"Description for task {i}", "Standard", 
+                       "Yes", str(start), otd, "None", "QA-Ref", "Lead-X", "Mgr-Y"))
+
+    # 3. SEED TRAINING (20 Modules)
+    c.execute("SELECT count(*) FROM training_repo")
+    if c.fetchone()[0] == 0:
+        topics = ["Python Basics", "Safety Protocols", "Leadership", "Agile", "Communication", "Data Privacy", "Cyber Security", "Excel Advanced", "Power BI", "SQL Funda", "Time Mgmt", "Conflict Res", "Negotiation", "Cloud AWS", "DevOps", "React JS", "Streamlit", "Machine Learning", "HR Policy", "Finance 101"]
+        for t in topics:
+            c.execute("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)",
+                      (str(uuid.uuid4())[:8], t, f"Learn about {t}", "http://example.com", 
+                       random.choice(["All", "Team Leader", "Team Member"]), random.choice([0, 1]), "System"))
+
+    # 4. SEED RESOURCES (20 Entries)
+    c.execute("SELECT count(*) FROM resource_tracker_v4")
+    if c.fetchone()[0] == 0:
+        depts = ["Engineering", "Quality", "Manufacturing"]
+        locs = ["Chennai", "Bangalore", "Pune"]
+        for i in range(20):
+            status = random.choice(["Active", "Active", "Inactive", "Yet to start"])
+            exit_date = str(date.today()) if status == "Inactive" else ""
+            reason = "Resigned" if status == "Inactive" else ""
+            
+            c.execute("INSERT INTO resource_tracker_v4 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", 
+                      (str(uuid.uuid4())[:8], f"Resource {i}", f"RES-{i}", "001", 
+                       random.choice(depts), random.choice(locs), "Manager X", str(date.today()),
+                       "MID", status, "PO-123", "", exit_date, "No", reason, 
+                       str(random.randint(20, 50)), "5"))
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
-    # 1. USER TABLE (New for Super Admin)
+    # 1. USER TABLE
     c.execute('''CREATE TABLE IF NOT EXISTS users (
-        username TEXT PRIMARY KEY, 
-        password TEXT, 
-        role TEXT, 
-        name TEXT, 
-        emp_id TEXT, 
-        img TEXT,
-        created_at TEXT
-    )''')
+        username TEXT PRIMARY KEY, password TEXT, role TEXT, name TEXT, 
+        emp_id TEXT, img TEXT, created_at TEXT)''')
 
     # 2. KPI Table
     c.execute('''CREATE TABLE IF NOT EXISTS tasks_v2 (
@@ -82,18 +147,15 @@ def init_db():
         ftr_customer TEXT, reference_part_number TEXT, ftr_internal TEXT, otd_internal TEXT,
         description_of_activity TEXT, activity_type TEXT, ftr_quality_gate_internal TEXT,
         date_of_clarity_in_input TEXT, start_date TEXT, otd_customer TEXT, customer_remarks TEXT,
-        name_quality_gate_referent TEXT, project_lead TEXT, customer_manager_name TEXT
-    )''')
+        name_quality_gate_referent TEXT, project_lead TEXT, customer_manager_name TEXT)''')
     
     # 3. Training Tables
     c.execute('''CREATE TABLE IF NOT EXISTS training_repo (
         id TEXT PRIMARY KEY, title TEXT, description TEXT, link TEXT, 
-        role_target TEXT, mandatory INTEGER, created_by TEXT
-    )''')
+        role_target TEXT, mandatory INTEGER, created_by TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS training_progress (
         user_name TEXT, training_id TEXT, status TEXT, 
-        last_updated TEXT, PRIMARY KEY (user_name, training_id)
-    )''')
+        last_updated TEXT, PRIMARY KEY (user_name, training_id))''')
     
     # 4. RESOURCE TRACKER TABLE
     c.execute('''CREATE TABLE IF NOT EXISTS resource_tracker_v4 (
@@ -101,24 +163,10 @@ def init_db():
         department TEXT, location TEXT, reporting_manager TEXT, onboarding_date TEXT,
         experience_level TEXT, status TEXT, po_details TEXT, remarks TEXT,
         effective_exit_date TEXT, backfill_status TEXT, reason_for_leaving TEXT,
-        hourly_rate TEXT, hardware_daily_cost TEXT
-    )''')
+        hourly_rate TEXT, hardware_daily_cost TEXT)''')
     
-    # --- SEED DEFAULT SUPER ADMIN ---
-    c.execute("SELECT count(*) FROM users WHERE role='Super Admin'")
-    if c.fetchone()[0] == 0:
-        # Default Admin: admin / admin123
-        c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
-                  ("admin", "admin123", "Super Admin", "System Admin", "ADM-001", "https://cdn-icons-png.flaticon.com/512/3135/3135715.png", str(date.today())))
-        
-        # Seed Demo Users if empty
-        users_demo = [
-            ("leader", "123", "Team Leader", "Sarah Jenkins", "LDR-001", "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200", str(date.today())),
-            ("member1", "123", "Team Member", "David Chen", "EMP-101", "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200", str(date.today()))
-        ]
-        for u in users_demo:
-            try: c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", u)
-            except: pass
+    # INJECT DATA
+    seed_data(c)
 
     conn.commit()
     conn.close()
@@ -244,6 +292,25 @@ def update_training_status(user_name, training_id, status):
     c.execute("INSERT OR REPLACE INTO training_progress VALUES (?,?,?,?)", 
               (user_name, training_id, status, str(date.today())))
     conn.commit(); conn.close()
+
+# --- FIXED: ADDED TRAINING IMPORT HELPER ---
+def import_training_csv(file):
+    try:
+        df = pd.read_csv(file)
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        for _, row in df.iterrows():
+            tid = str(uuid.uuid4())[:8]
+            # Assumes CSV has columns: title, description, link, role_target, mandatory
+            c.execute("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)",
+                      (tid, row.get('title','No Title'), row.get('description',''), 
+                       row.get('link','#'), row.get('role_target','All'), 
+                       int(row.get('mandatory', 0)), 'Imported'))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        return False
 
 # --- RESOURCE TRACKER HELPERS ---
 def get_resource_list():
@@ -631,12 +698,17 @@ def app_training():
         t1, t2 = st.tabs(["Repository", "Add New"])
         with t1:
             df = get_trainings()
-            with st.expander("📂 Import / Export"):
-                col_exp, _ = st.columns(2)
+            with st.expander("📂 Import / Export", expanded=True):
+                col_imp, col_exp = st.columns(2)
+                # FIXED: Added File Uploader
+                with col_imp:
+                    up_train = st.file_uploader("Upload CSV", type=['csv'], key="train_csv_up")
+                    if up_train:
+                        if import_training_csv(up_train): st.success("Trainings Imported!"); st.rerun()
                 with col_exp:
                     if not df.empty:
                         csv = df.to_csv(index=False).encode('utf-8')
-                        st.download_button("Download CSV", data=csv, file_name="training_repo.csv", mime="text/csv")
+                        st.download_button("Download CSV", data=csv, file_name="training_repo.csv", mime="text/csv", use_container_width=True)
             if not df.empty: st.dataframe(df, use_container_width=True)
             else: st.info("Repository empty.")
         with t2:
