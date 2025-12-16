@@ -57,7 +57,7 @@ st.markdown(
 )
 
 # ---------- DATABASE ----------
-DB_FILE = "portal_data_final_v13.db"
+DB_FILE = "portal_data_final_v14_demo.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -104,6 +104,42 @@ def init_db():
         ticket_raised TEXT
     )''')
     
+    # --- DEMO DATA INJECTION ---
+    
+    # Check & Add Training Demo Data
+    c.execute("SELECT count(*) FROM training_repo")
+    if c.fetchone()[0] == 0:
+        trainings = [
+            ("TR-01", "Python Basics", "Introduction to Python syntax", "https://python.org", "All", 1, "System"),
+            ("TR-02", "Advanced Pandas", "Data manipulation mastery", "https://pandas.pydata.org", "Team Member", 0, "System"),
+            ("TR-03", "Streamlit UI", "Building interactive dashboards", "https://streamlit.io", "All", 1, "System"),
+            ("TR-04", "Workplace Safety", "Fire & Health safety protocols", "https://osha.gov", "All", 1, "System"),
+            ("TR-05", "Leadership 101", "Managing high-performance teams", "https://hbr.org", "Team Leader", 1, "System"),
+            ("TR-06", "Agile Scrum", "Sprints, standups and retrospectives", "https://scrum.org", "All", 0, "System"),
+            ("TR-07", "Git Version Control", "Branching strategies and PRs", "https://github.com", "Team Member", 1, "System"),
+            ("TR-08", "Cyber Security", "Phishing awareness and data privacy", "https://security.com", "All", 1, "System"),
+            ("TR-09", "Conflict Resolution", "HR guidelines for conflicts", "https://hr.com", "Team Leader", 0, "System"),
+            ("TR-10", "Cloud Computing", "AWS Fundamentals", "https://aws.amazon.com", "Team Member", 0, "System")
+        ]
+        c.executemany("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)", trainings)
+
+    # Check & Add Resource Demo Data
+    c.execute("SELECT count(*) FROM onboarding_details")
+    if c.fetchone()[0] == 0:
+        resources = [
+            ("res1", "Alice Johnson", "EMP-201", "TID-201", "Chennai", "Office", 1, 1, 1, 1, 0, 1, 0, 0, 1, "", ""),
+            ("res2", "Bob Smith", "EMP-202", "TID-202", "Pune", "Remote", 1, 1, 0, 0, 1, 0, 1, 1, 0, "VPN Issue", "TKT-1029"),
+            ("res3", "Charlie Brown", "EMP-203", "TID-203", "Bangalore", "Office", 1, 1, 1, 1, 0, 1, 0, 0, 1, "", ""),
+            ("res4", "Diana Prince", "EMP-204", "TID-204", "Chennai", "Remote", 0, 0, 0, 0, 0, 0, 0, 0, 0, "", ""),
+            ("res5", "Evan Wright", "EMP-205", "TID-205", "Pune", "Office", 1, 1, 1, 0, 0, 1, 0, 0, 0, "Laptop Delay", "TKT-3321"),
+            ("res6", "Fiona Gallagher", "EMP-206", "TID-206", "Client Site", "Office", 1, 1, 1, 1, 0, 1, 0, 0, 1, "", ""),
+            ("res7", "George Martin", "EMP-207", "TID-207", "Bangalore", "Remote", 1, 0, 0, 0, 1, 0, 1, 0, 0, "", ""),
+            ("res8", "Hannah Baker", "EMP-208", "TID-208", "Chennai", "Office", 1, 1, 1, 1, 0, 1, 0, 0, 1, "", ""),
+            ("res9", "Ian Somerhalder", "EMP-209", "TID-209", "Pune", "Remote", 1, 1, 1, 1, 1, 1, 1, 1, 1, "", ""),
+            ("res10", "Jack Daniels", "EMP-210", "TID-210", "Chennai", "Office", 0, 1, 0, 0, 0, 0, 0, 0, 0, "No ID Card", "")
+        ]
+        c.executemany("INSERT INTO onboarding_details VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", resources)
+
     conn.commit()
     conn.close()
 
