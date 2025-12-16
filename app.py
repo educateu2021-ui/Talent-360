@@ -3,7 +3,7 @@ import pandas as pd
 import sqlite3
 import uuid
 from datetime import date, datetime, timedelta
-import time
+import random
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -57,7 +57,8 @@ st.markdown(
 )
 
 # ---------- DATABASE ----------
-DB_FILE = "portal_data_final_v15_demo.db"
+# CHANGED FILENAME TO FORCE FRESH DB CREATION AND FIX ERROR
+DB_FILE = "portal_data_v17_fixed.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -83,7 +84,7 @@ def init_db():
         last_updated TEXT, PRIMARY KEY (user_name, training_id)
     )''')
     
-    # 3. NEW RESOURCE TRACKER TABLE (Replaces old onboarding)
+    # 3. RESOURCE TRACKER TABLE
     c.execute('''CREATE TABLE IF NOT EXISTS resource_tracker_v2 (
         id TEXT PRIMARY KEY,
         employee_name TEXT,
@@ -99,7 +100,9 @@ def init_db():
         remarks TEXT,
         effective_exit_date TEXT,
         backfill_status TEXT,
-        reason_for_leaving TEXT
+        reason_for_leaving TEXT,
+        hourly_rate TEXT,
+        hardware_daily_cost TEXT
     )''')
     
     # --- DEMO DATA INJECTION ---
@@ -116,22 +119,59 @@ def init_db():
         ]
         c.executemany("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)", trainings)
 
-    # NEW Resource Tracker Demo Data (10 Entries)
+    # NEW Resource Tracker Demo Data
     c.execute("SELECT count(*) FROM resource_tracker_v2")
     if c.fetchone()[0] == 0:
         resources = [
-            (str(uuid.uuid4())[:8], "Alice Johnson", "EMP001", "001", "Engineering", "Chennai", "Sarah Jenkins", "2024-01-10", "SENIOR", "Active", "PO-998877", "Key Resource", "", "", ""),
-            (str(uuid.uuid4())[:8], "Bob Smith", "EMP002", "016", "Quality", "Bangalore", "Sarah Jenkins", "2024-02-15", "MID", "Active", "PO-112233", "", "", "", ""),
-            (str(uuid.uuid4())[:8], "Charlie Davis", "EMP003", "089", "Manufacturing", "Remote", "Sarah Jenkins", "2023-11-01", "EXPERT", "Inactive", "PO-445566", "Resigned for better offer", "2024-12-01", "Yes", "Higher Salary"),
-            (str(uuid.uuid4())[:8], "Diana Prince", "EMP004", "002", "Engineering", "Chennai", "Sarah Jenkins", "2024-03-01", "JUNIOR", "Yet to start", "PO-778899", "Waiting for laptop", "", "", ""),
-            (str(uuid.uuid4())[:8], "Evan Wright", "EMP005", "012", "Quality", "Pune", "Sarah Jenkins", "2024-01-20", "ADVANCED", "Active", "PO-334455", "", "", "", ""),
-            (str(uuid.uuid4())[:8], "Fiona Green", "EMP006", "005", "Engineering", "Chennai", "Sarah Jenkins", "2023-12-10", "MID", "Inactive", "PO-223344", "Personal Reasons", "2024-11-15", "No", "Relocation"),
-            (str(uuid.uuid4())[:8], "George Hall", "EMP007", "001", "Manufacturing", "Remote", "Sarah Jenkins", "2024-05-01", "SENIOR", "Active", "PO-556677", "", "", "", ""),
-            (str(uuid.uuid4())[:8], "Hannah Lee", "EMP008", "089", "Engineering", "Bangalore", "Sarah Jenkins", "2024-06-15", "JUNIOR", "Active", "PO-889900", "Fresher", "", "", ""),
-            (str(uuid.uuid4())[:8], "Ian Scott", "EMP009", "016", "Quality", "Chennai", "Sarah Jenkins", "2024-04-10", "EXPERT", "Yet to start", "PO-110022", "Notice period in prev comp", "", "", ""),
-            (str(uuid.uuid4())[:8], "Jack Wilson", "EMP010", "003", "Engineering", "Pune", "Sarah Jenkins", "2024-02-28", "MID", "Active", "PO-443322", "", "", "", "")
+            (str(uuid.uuid4())[:8], "Alice Johnson", "EMP001", "001", "Engineering", "Chennai", "Sarah Jenkins", "2024-01-10", "SENIOR", "Active", "PO-998877", "Key Resource", "", "", "", "25", "5"),
+            (str(uuid.uuid4())[:8], "Bob Smith", "EMP002", "016", "Quality", "Bangalore", "Sarah Jenkins", "2024-02-15", "MID", "Active", "PO-112233", "", "", "", "", "18", "2"),
+            (str(uuid.uuid4())[:8], "Charlie Davis", "EMP003", "089", "Manufacturing", "Remote", "Sarah Jenkins", "2023-11-01", "EXPERT", "Inactive", "PO-445566", "Resigned", "2024-12-01", "Yes", "Higher Salary", "40", "0"),
+            (str(uuid.uuid4())[:8], "Diana Prince", "EMP004", "002", "Engineering", "Chennai", "Sarah Jenkins", "2024-03-01", "JUNIOR", "Yet to start", "PO-778899", "Waiting for laptop", "", "", "", "12", "5"),
+            (str(uuid.uuid4())[:8], "Evan Wright", "EMP005", "012", "Quality", "Pune", "Sarah Jenkins", "2024-01-20", "ADVANCED", "Active", "PO-334455", "", "", "", "", "30", "5"),
+            (str(uuid.uuid4())[:8], "Fiona Green", "EMP006", "005", "Engineering", "Chennai", "Sarah Jenkins", "2023-12-10", "MID", "Inactive", "PO-223344", "Personal", "2024-11-15", "No", "Relocation", "20", "5"),
+            (str(uuid.uuid4())[:8], "George Hall", "EMP007", "001", "Manufacturing", "Remote", "Sarah Jenkins", "2024-05-01", "SENIOR", "Active", "PO-556677", "", "", "", "", "28", "0"),
+            (str(uuid.uuid4())[:8], "Hannah Lee", "EMP008", "089", "Engineering", "Bangalore", "Sarah Jenkins", "2024-06-15", "JUNIOR", "Active", "PO-889900", "Fresher", "", "", "", "15", "2"),
+            (str(uuid.uuid4())[:8], "Ian Scott", "EMP009", "016", "Quality", "Chennai", "Sarah Jenkins", "2024-04-10", "EXPERT", "Yet to start", "PO-110022", "Notice period", "", "", "", "45", "5"),
+            (str(uuid.uuid4())[:8], "Jack Wilson", "EMP010", "003", "Engineering", "Pune", "Sarah Jenkins", "2024-02-28", "MID", "Active", "PO-443322", "", "", "", "", "22", "5")
         ]
-        c.executemany("INSERT INTO resource_tracker_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", resources)
+        c.executemany("INSERT INTO resource_tracker_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", resources)
+
+    # KPI 20 TASKS DEMO DATA
+    c.execute("SELECT count(*) FROM tasks_v2")
+    if c.fetchone()[0] == 0:
+        tasks = []
+        pilots = ["David Chen", "Emily Davis"]
+        statuses = ["Completed", "Inprogress", "Hold", "Cancelled"]
+        
+        for i in range(1, 21):
+            tid = str(uuid.uuid4())[:8]
+            name = f"Project Task {i:02d}"
+            pilot = random.choice(pilots)
+            status = random.choice(statuses)
+            
+            # Dates
+            start = date.today() - timedelta(days=random.randint(10, 60))
+            due = start + timedelta(days=random.randint(5, 15))
+            
+            actual = None
+            otd = "N/A"
+            if status == "Completed":
+                delay = random.choice([-2, -1, 0, 0, 1, 5, 10]) 
+                actual = due + timedelta(days=delay)
+                otd = "OK" if actual <= due else "NOT OK"
+            else:
+                actual = None
+            
+            ftr = "Yes" if random.random() > 0.3 else "No"
+            if status == "Cancelled": ftr = "N/A"; otd="N/A"
+
+            tasks.append((
+                tid, pilot, name, str(start), str(actual) if actual else None, str(due),
+                status, ftr, f"REF-{i*100}", "Yes", otd, f"Description for task {i}",
+                "Standard", "Yes", str(start), otd, "None", "QA-Ref", "Lead-X", "Mgr-Y"
+            ))
+            
+        c.executemany("INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", tasks)
 
     conn.commit()
     conn.close()
@@ -260,7 +300,8 @@ def save_resource_entry(data, res_id=None):
     
     cols = ['employee_name', 'employee_id', 'dev_code', 'department', 'location', 
             'reporting_manager', 'onboarding_date', 'experience_level', 'status', 
-            'po_details', 'remarks', 'effective_exit_date', 'backfill_status', 'reason_for_leaving']
+            'po_details', 'remarks', 'effective_exit_date', 'backfill_status', 
+            'reason_for_leaving', 'hourly_rate', 'hardware_daily_cost']
             
     vals = [str(data.get(k, '')) for k in cols]
     
@@ -273,33 +314,25 @@ def save_resource_entry(data, res_id=None):
         c.execute(f"INSERT INTO resource_tracker_v2 VALUES ({placeholders})", (new_id, *vals))
     conn.commit(); conn.close()
 
-def delete_resource_entry(res_id):
-    conn = sqlite3.connect(DB_FILE)
-    conn.execute("DELETE FROM resource_tracker_v2 WHERE id=?", (res_id,))
-    conn.commit(); conn.close()
-
 # --- PLOTLY HELPERS ---
 def get_analytics_chart(df):
     if df.empty: return go.Figure()
     df_local = df.copy()
-    df_local['start_date'] = pd.to_datetime(df_local['start_date'], dayfirst=True, errors='coerce')
-    df_local = df_local.dropna(subset=['start_date'])
-    if df_local.empty: return go.Figure()
-    df_local['month'] = df_local['start_date'].dt.strftime('%b')
-    monthly = df_local.groupby(['month', 'status']).size().reset_index(name='count')
-    fig = px.bar(monthly, x='month', y='count', color='status', barmode='group',
-                 color_discrete_map={"Completed":"#10b981","Inprogress":"#3b82f6","Hold":"#ef4444","Cancelled":"#9ca3af"})
-    fig.update_layout(margin=dict(l=0,r=0,t=10,b=0), height=300)
+    status_counts = df_local['status'].value_counts()
+    fig = px.bar(x=status_counts.index, y=status_counts.values, color=status_counts.index,
+                 color_discrete_map={"Completed":"#10b981","Inprogress":"#3b82f6","Hold":"#f59e0b","Cancelled":"#ef4444"})
+    fig.update_layout(xaxis_title="Status", yaxis_title="Count", height=300, showlegend=False, margin=dict(l=0,r=0,t=10,b=0))
     return fig
 
 def get_donut(df):
     if df.empty: return go.Figure()
+    # FTR Donut
+    ftr_yes = len(df[df['ftr_internal']=='Yes'])
     total = len(df)
-    completed = len(df[df['status']=='Completed'])
-    completed_pct = int((completed/total)*100) if total>0 else 0
-    fig = go.Figure(data=[go.Pie(labels=['Completed','Pending'], values=[completed_pct, 100-completed_pct], hole=.7, textinfo='none')])
+    pct = int((ftr_yes/total)*100) if total>0 else 0
+    fig = go.Figure(data=[go.Pie(labels=['FTR OK','FTR NOT OK'], values=[ftr_yes, total-ftr_yes], hole=.7, textinfo='none', marker_colors=['#10b981', '#ef4444'])])
     fig.update_layout(height=240, margin=dict(l=0,r=0,t=0,b=0), 
-                      annotations=[dict(text=f"{completed_pct}%", x=0.5, y=0.5, showarrow=False, font=dict(size=20))])
+                      annotations=[dict(text=f"FTR {pct}%", x=0.5, y=0.5, showarrow=False, font=dict(size=16))])
     return fig
 
 # ---------- AUTH ----------
@@ -390,6 +423,8 @@ def app_kpi():
                         pilot_val = default_data.get("name_activity_pilot")
                         p_idx = pilots.index(pilot_val) if pilot_val in pilots else 0
                         pilot = st.selectbox("Assign To", pilots, index=p_idx)
+                        # OTD Display (Read only)
+                        st.text_input("OTD Status (Computed)", value=default_data.get("otd_customer", "N/A"), disabled=True)
                     with c2:
                         statuses = ["Hold", "Inprogress", "Completed", "Cancelled"]
                         stat_val = default_data.get("status", "Inprogress")
@@ -405,7 +440,9 @@ def app_kpi():
                         desc = st.text_area("Description", value=default_data.get("description_of_activity", ""))
                         ref_part = st.text_input("Ref Part #", value=default_data.get("reference_part_number", ""))
                     with c5:
-                        ftr = st.selectbox("FTR Internal", ["Yes", "No"], index=0)
+                        ftr_opts = ["Yes", "No", "Awaited"]
+                        ftr_val = default_data.get("ftr_internal", "Yes")
+                        ftr = st.selectbox("FTR Internal", ftr_opts, index=ftr_opts.index(ftr_val) if ftr_val in ftr_opts else 0)
                         rem = st.text_area("Remarks", value=default_data.get("customer_remarks", ""))
                     
                     if st.form_submit_button("💾 Save Task", type="primary", use_container_width=True):
@@ -451,6 +488,7 @@ def app_kpi():
             
             st.markdown("#### Active Tasks")
             if not df.empty:
+                # Paginate slightly for performance
                 for idx, row in df.iterrows():
                     with st.container(border=True):
                         c_main, c_meta, c_btn = st.columns([4, 2, 1])
@@ -460,7 +498,13 @@ def app_kpi():
                         with c_meta:
                             st.caption(f"👤 {row.get('name_activity_pilot','-')}")
                             st.caption(f"📅 Due: {row.get('commitment_date_to_customer','-')}")
-                            st.write(f"**{row['status']}**")
+                            # Status Badge
+                            st_color = "black"
+                            if row['status'] == "Completed": st_color = "#10b981"
+                            elif row['status'] == "Cancelled": st_color = "#ef4444"
+                            elif row['status'] == "Hold": st_color = "#f59e0b"
+                            else: st_color = "#3b82f6"
+                            st.markdown(f"<span style='color:{st_color}; font-weight:bold;'>{row['status']}</span> | OTD: {row.get('otd_customer','-')}", unsafe_allow_html=True)
                         with c_btn:
                             if st.button("Edit", key=f"kpi_edit_{row['id']}", use_container_width=True):
                                 st.session_state['edit_kpi_id'] = row['id']; st.rerun()
@@ -544,7 +588,7 @@ def app_training():
                         if n_stat != c_stat:
                             update_training_status(st.session_state['name'], row['id'], n_stat); st.rerun()
 
-# --- RESOURCE TRACKER APP (NEW) ---
+# --- RESOURCE TRACKER APP (UPDATED) ---
 def app_resource():
     c1, c2 = st.columns([1, 6])
     with c1:
@@ -556,18 +600,29 @@ def app_resource():
     if st.session_state['role'] != "Team Leader":
         st.error("🚫 ACCESS RESTRICTED")
         st.warning(f"Hello {st.session_state['name']}, this module is restricted to Team Leaders and above.")
-        st.info("Please contact your administrator if you believe this is an error.")
         return
 
     # --- STATE MANAGEMENT ---
     if 'res_edit_id' not in st.session_state: st.session_state['res_edit_id'] = None
-    if 'res_view_mode' not in st.session_state: st.session_state['res_view_mode'] = 'LIST' # LIST or FORM
+    if 'res_view_mode' not in st.session_state: st.session_state['res_view_mode'] = 'LIST' 
 
-    # --- LIST VIEW ---
+    # --- LIST VIEW WITH FILTERS ---
     if st.session_state['res_view_mode'] == 'LIST':
+        
+        # 1. SEARCH & FILTERS SECTION (Collapsible)
+        with st.expander("🔎 Search & Filters", expanded=False):
+            fc1, fc2, fc3 = st.columns(3)
+            with fc1:
+                search_query = st.text_input("Search Name/ID/Dev", placeholder="Type to search...")
+            with fc2:
+                dept_filter = st.multiselect("Filter Department", ["Engineering", "Quality", "Manufacturing"])
+            with fc3:
+                stat_filter = st.multiselect("Filter Status", ["Active", "Inactive", "Yet to start"])
+
+        # 2. DATA TABLE & ACTIONS
         col_act, col_add = st.columns([5, 1])
         with col_act:
-            st.markdown("#### Team Resources")
+            st.markdown("#### Resource List")
         with col_add:
             if st.button("➕ Add New", type="primary", use_container_width=True):
                 st.session_state['res_edit_id'] = None
@@ -577,24 +632,37 @@ def app_resource():
         df = get_resource_list()
         
         if not df.empty:
-            # Display as a dataframe with selection
-            # Custom visual dataframe
-            display_cols = ['employee_name', 'employee_id', 'department', 'status', 'location']
+            # Apply Filters
+            if search_query:
+                df = df[df.apply(lambda row: search_query.lower() in str(row.values).lower(), axis=1)]
+            if dept_filter:
+                df = df[df['department'].isin(dept_filter)]
+            if stat_filter:
+                df = df[df['status'].isin(stat_filter)]
+            
+            # --- CUSTOMIZE DATAFRAME FOR DISPLAY ---
+            # Calculate derived costs for display
+            df['hourly_rate'] = pd.to_numeric(df['hourly_rate'], errors='coerce').fillna(0)
+            df['hardware_daily_cost'] = pd.to_numeric(df['hardware_daily_cost'], errors='coerce').fillna(0)
+            df['Daily_Labor_Cost_$'] = df['hourly_rate'] * 8
+            df['Total_Daily_Bill_$'] = df['Daily_Labor_Cost_$'] + df['hardware_daily_cost']
+            
+            display_cols = ['employee_name', 'employee_id', 'department', 'status', 'location', 
+                            'hourly_rate', 'Daily_Labor_Cost_$', 'Total_Daily_Bill_$']
+            
             st.dataframe(df[display_cols], use_container_width=True, hide_index=True)
             
             st.markdown("##### Manage Entry")
-            sel_res = st.selectbox("Select Resource to Edit/View", df['employee_name'] + " (" + df['employee_id'] + ")")
-            
-            c_edit, c_del = st.columns([1, 5])
-            with c_edit:
+            if len(df) > 0:
+                sel_res = st.selectbox("Select Resource to Edit/View", df['employee_name'] + " (" + df['employee_id'] + ")")
                 if st.button("Edit Selected", use_container_width=True):
                     # Find ID
                     sel_id = df[df['employee_name'] + " (" + df['employee_id'] + ")" == sel_res].iloc[0]['id']
                     st.session_state['res_edit_id'] = sel_id
                     st.session_state['res_view_mode'] = 'FORM'
                     st.rerun()
-            with c_del:
-                pass # Spacer
+            else:
+                st.info("No records match your filters.")
         else:
             st.info("No resources found in database.")
 
@@ -612,45 +680,53 @@ def app_resource():
             row = df[df['id'] == res_id]
             if not row.empty: d = row.iloc[0].to_dict()
 
-        # We do NOT use st.form here to allow dynamic UI updates for "Inactive" status
+        # We do NOT use st.form here to allow dynamic UI updates
         with st.container(border=True):
             col1, col2 = st.columns(2)
             
             with col1:
-                # Field: Employee Name
                 emp_name = st.text_input("Employee Name", value=d.get('employee_name', ''))
-                # Field: DEV (Dropdown)
                 dev_opts = ["001", "002", "003", "005", "012", "016", "089"]
                 dev_val = d.get('dev_code', '001')
-                dev_code = st.selectbox("DEV", dev_opts, index=dev_opts.index(dev_val) if dev_val in dev_opts else 0, help="e.g., 001 to 016, 089 etc.")
-                # Field: Location
+                dev_code = st.selectbox("DEV", dev_opts, index=dev_opts.index(dev_val) if dev_val in dev_opts else 0)
                 loc_opts = ["Chennai", "Bangalore", "Pune", "Remote"]
                 loc_val = d.get('location', 'Chennai')
                 location = st.selectbox("Location", loc_opts, index=loc_opts.index(loc_val) if loc_val in loc_opts else 0)
-                # Field: Onboarding Date
                 o_date = st.date_input("Onboarding Start Date", value=parse_date(d.get('onboarding_date')) or date.today())
-                # Field: Status (Triggers Logic)
                 stat_opts = ["Yet to start", "Active", "Inactive"]
                 stat_val = d.get('status', 'Yet to start')
                 status = st.selectbox("Status", stat_opts, index=stat_opts.index(stat_val) if stat_val in stat_opts else 0)
 
             with col2:
-                # Field: Employee ID
                 emp_id = st.text_input("Employee ID", value=d.get('employee_id', ''))
-                # Field: Department
                 dept_opts = ["Engineering", "Quality", "Manufacturing"]
                 dept_val = d.get('department', 'Engineering')
                 department = st.selectbox("Department", dept_opts, index=dept_opts.index(dept_val) if dept_val in dept_opts else 0)
-                # Field: Reporting Manager
-                rep_man = st.selectbox("Reporting Manager", ["Sarah Jenkins", "Mike Ross", "Harvey Specter"], index=0) # Demo list
-                # Field: Experience Level
+                rep_man = st.selectbox("Reporting Manager", ["Sarah Jenkins", "Mike Ross", "Harvey Specter"], index=0)
                 exp_opts = ["JUNIOR", "MID", "ADVANCED", "SENIOR", "EXPERT"]
                 exp_val = d.get('experience_level', 'JUNIOR')
                 exp_lvl = st.selectbox("Experience Level", exp_opts, index=exp_opts.index(exp_val) if exp_val in exp_opts else 0)
-                # Field: PO Details
                 po_det = st.text_input("PO Details", value=d.get('po_details', ''), placeholder="PO number")
 
-            # Field: Remarks (Full Width)
+            # --- FINANCIALS (NEW SECTION) ---
+            st.markdown("##### 💲 Financials (USD)")
+            fin1, fin2, fin3, fin4 = st.columns(4)
+            with fin1:
+                # User inputs Hourly Rate
+                hr_rate = st.number_input("Hourly Rate ($)", min_value=0.0, value=float(d.get('hourly_rate', 0.0)))
+            with fin2:
+                # User inputs Hardware Cost
+                hw_cost = st.number_input("Hardware Cost (Daily $)", min_value=0.0, value=float(d.get('hardware_daily_cost', 0.0)))
+            with fin3:
+                # Auto Calculate Labor Daily
+                lab_daily = hr_rate * 8
+                st.metric("Labor Daily (8h)", f"${lab_daily:,.2f}")
+            with fin4:
+                # Auto Calculate Total Daily
+                tot_daily = lab_daily + hw_cost
+                st.metric("Total Daily Bill", f"${tot_daily:,.2f}")
+
+            # Remarks
             remarks = st.text_area("Remarks if any", value=d.get('remarks', ''))
 
             # --- CONDITIONAL BRANCHING FOR INACTIVE ---
@@ -694,7 +770,9 @@ def app_resource():
                             "po_details": po_det, "remarks": remarks,
                             "effective_exit_date": str(exit_date) if exit_date else "",
                             "backfill_status": backfill if status == "Inactive" else "",
-                            "reason_for_leaving": reason if status == "Inactive" else ""
+                            "reason_for_leaving": reason if status == "Inactive" else "",
+                            "hourly_rate": str(hr_rate),
+                            "hardware_daily_cost": str(hw_cost)
                         }
                         save_resource_entry(payload, res_id)
                         st.success("Resource Saved Successfully!")
@@ -725,7 +803,7 @@ def main():
         if app == 'HOME': app_home()
         elif app == 'KPI': app_kpi()
         elif app == 'TRAINING': app_training()
-        elif app == 'RESOURCE': app_resource() # Updated App
+        elif app == 'RESOURCE': app_resource()
 
 if __name__ == "__main__":
     main()
