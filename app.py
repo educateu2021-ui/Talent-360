@@ -48,16 +48,16 @@ st.markdown(
     }
     
     /* Status Badges */
-    .status-ok { color: #10b981; font-weight: bold; }
-    .status-pending { color: #f59e0b; font-weight: bold; }
-    .status-block { color: #ef4444; font-weight: bold; }
+    .status-active { color: #10b981; font-weight: bold; }
+    .status-inactive { color: #ef4444; font-weight: bold; }
+    .status-yet { color: #f59e0b; font-weight: bold; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # ---------- DATABASE ----------
-DB_FILE = "portal_data_final_v14_demo.db"
+DB_FILE = "portal_data_final_v15_demo.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -83,30 +83,28 @@ def init_db():
         last_updated TEXT, PRIMARY KEY (user_name, training_id)
     )''')
     
-    # 3. Resource Tracker Table
-    c.execute('''CREATE TABLE IF NOT EXISTS onboarding_details (
-        username TEXT PRIMARY KEY,
-        fullname TEXT,
-        emp_id TEXT,
-        tid TEXT,
+    # 3. NEW RESOURCE TRACKER TABLE (Replaces old onboarding)
+    c.execute('''CREATE TABLE IF NOT EXISTS resource_tracker_v2 (
+        id TEXT PRIMARY KEY,
+        employee_name TEXT,
+        employee_id TEXT,
+        dev_code TEXT,
+        department TEXT,
         location TEXT,
-        work_mode TEXT,
-        hr_policy_briefing INTEGER,
-        it_system_setup INTEGER,
-        tid_active INTEGER,
-        team_centre_training INTEGER,
-        agt_access INTEGER,
-        ext_mail_id INTEGER,
-        rdp_access INTEGER,
-        avd_access INTEGER,
-        teamcenter_access INTEGER,
-        blocking_point TEXT,
-        ticket_raised TEXT
+        reporting_manager TEXT,
+        onboarding_date TEXT,
+        experience_level TEXT,
+        status TEXT,
+        po_details TEXT,
+        remarks TEXT,
+        effective_exit_date TEXT,
+        backfill_status TEXT,
+        reason_for_leaving TEXT
     )''')
     
     # --- DEMO DATA INJECTION ---
     
-    # Check & Add Training Demo Data
+    # Training Demo Data
     c.execute("SELECT count(*) FROM training_repo")
     if c.fetchone()[0] == 0:
         trainings = [
@@ -114,31 +112,26 @@ def init_db():
             ("TR-02", "Advanced Pandas", "Data manipulation mastery", "https://pandas.pydata.org", "Team Member", 0, "System"),
             ("TR-03", "Streamlit UI", "Building interactive dashboards", "https://streamlit.io", "All", 1, "System"),
             ("TR-04", "Workplace Safety", "Fire & Health safety protocols", "https://osha.gov", "All", 1, "System"),
-            ("TR-05", "Leadership 101", "Managing high-performance teams", "https://hbr.org", "Team Leader", 1, "System"),
-            ("TR-06", "Agile Scrum", "Sprints, standups and retrospectives", "https://scrum.org", "All", 0, "System"),
-            ("TR-07", "Git Version Control", "Branching strategies and PRs", "https://github.com", "Team Member", 1, "System"),
-            ("TR-08", "Cyber Security", "Phishing awareness and data privacy", "https://security.com", "All", 1, "System"),
-            ("TR-09", "Conflict Resolution", "HR guidelines for conflicts", "https://hr.com", "Team Leader", 0, "System"),
-            ("TR-10", "Cloud Computing", "AWS Fundamentals", "https://aws.amazon.com", "Team Member", 0, "System")
+            ("TR-05", "Leadership 101", "Managing high-performance teams", "https://hbr.org", "Team Leader", 1, "System")
         ]
         c.executemany("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)", trainings)
 
-    # Check & Add Resource Demo Data
-    c.execute("SELECT count(*) FROM onboarding_details")
+    # NEW Resource Tracker Demo Data (10 Entries)
+    c.execute("SELECT count(*) FROM resource_tracker_v2")
     if c.fetchone()[0] == 0:
         resources = [
-            ("res1", "Alice Johnson", "EMP-201", "TID-201", "Chennai", "Office", 1, 1, 1, 1, 0, 1, 0, 0, 1, "", ""),
-            ("res2", "Bob Smith", "EMP-202", "TID-202", "Pune", "Remote", 1, 1, 0, 0, 1, 0, 1, 1, 0, "VPN Issue", "TKT-1029"),
-            ("res3", "Charlie Brown", "EMP-203", "TID-203", "Bangalore", "Office", 1, 1, 1, 1, 0, 1, 0, 0, 1, "", ""),
-            ("res4", "Diana Prince", "EMP-204", "TID-204", "Chennai", "Remote", 0, 0, 0, 0, 0, 0, 0, 0, 0, "", ""),
-            ("res5", "Evan Wright", "EMP-205", "TID-205", "Pune", "Office", 1, 1, 1, 0, 0, 1, 0, 0, 0, "Laptop Delay", "TKT-3321"),
-            ("res6", "Fiona Gallagher", "EMP-206", "TID-206", "Client Site", "Office", 1, 1, 1, 1, 0, 1, 0, 0, 1, "", ""),
-            ("res7", "George Martin", "EMP-207", "TID-207", "Bangalore", "Remote", 1, 0, 0, 0, 1, 0, 1, 0, 0, "", ""),
-            ("res8", "Hannah Baker", "EMP-208", "TID-208", "Chennai", "Office", 1, 1, 1, 1, 0, 1, 0, 0, 1, "", ""),
-            ("res9", "Ian Somerhalder", "EMP-209", "TID-209", "Pune", "Remote", 1, 1, 1, 1, 1, 1, 1, 1, 1, "", ""),
-            ("res10", "Jack Daniels", "EMP-210", "TID-210", "Chennai", "Office", 0, 1, 0, 0, 0, 0, 0, 0, 0, "No ID Card", "")
+            (str(uuid.uuid4())[:8], "Alice Johnson", "EMP001", "001", "Engineering", "Chennai", "Sarah Jenkins", "2024-01-10", "SENIOR", "Active", "PO-998877", "Key Resource", "", "", ""),
+            (str(uuid.uuid4())[:8], "Bob Smith", "EMP002", "016", "Quality", "Bangalore", "Sarah Jenkins", "2024-02-15", "MID", "Active", "PO-112233", "", "", "", ""),
+            (str(uuid.uuid4())[:8], "Charlie Davis", "EMP003", "089", "Manufacturing", "Remote", "Sarah Jenkins", "2023-11-01", "EXPERT", "Inactive", "PO-445566", "Resigned for better offer", "2024-12-01", "Yes", "Higher Salary"),
+            (str(uuid.uuid4())[:8], "Diana Prince", "EMP004", "002", "Engineering", "Chennai", "Sarah Jenkins", "2024-03-01", "JUNIOR", "Yet to start", "PO-778899", "Waiting for laptop", "", "", ""),
+            (str(uuid.uuid4())[:8], "Evan Wright", "EMP005", "012", "Quality", "Pune", "Sarah Jenkins", "2024-01-20", "ADVANCED", "Active", "PO-334455", "", "", "", ""),
+            (str(uuid.uuid4())[:8], "Fiona Green", "EMP006", "005", "Engineering", "Chennai", "Sarah Jenkins", "2023-12-10", "MID", "Inactive", "PO-223344", "Personal Reasons", "2024-11-15", "No", "Relocation"),
+            (str(uuid.uuid4())[:8], "George Hall", "EMP007", "001", "Manufacturing", "Remote", "Sarah Jenkins", "2024-05-01", "SENIOR", "Active", "PO-556677", "", "", "", ""),
+            (str(uuid.uuid4())[:8], "Hannah Lee", "EMP008", "089", "Engineering", "Bangalore", "Sarah Jenkins", "2024-06-15", "JUNIOR", "Active", "PO-889900", "Fresher", "", "", ""),
+            (str(uuid.uuid4())[:8], "Ian Scott", "EMP009", "016", "Quality", "Chennai", "Sarah Jenkins", "2024-04-10", "EXPERT", "Yet to start", "PO-110022", "Notice period in prev comp", "", "", ""),
+            (str(uuid.uuid4())[:8], "Jack Wilson", "EMP010", "003", "Engineering", "Pune", "Sarah Jenkins", "2024-02-28", "MID", "Active", "PO-443322", "", "", "", "")
         ]
-        c.executemany("INSERT INTO onboarding_details VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", resources)
+        c.executemany("INSERT INTO resource_tracker_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", resources)
 
     conn.commit()
     conn.close()
@@ -253,37 +246,36 @@ def import_training_csv(file):
         return True
     except: return False
 
-# --- RESOURCE TRACKER (ONBOARDING) HELPERS ---
-def get_onboarding_details(username):
+# --- RESOURCE TRACKER (NEW) HELPERS ---
+def get_resource_list():
     conn = sqlite3.connect(DB_FILE)
-    try: df = pd.read_sql_query("SELECT * FROM onboarding_details WHERE username=?", conn, params=(username,))
+    try: df = pd.read_sql_query("SELECT * FROM resource_tracker_v2", conn)
     except: df = pd.DataFrame()
     conn.close()
     return df
 
-def get_all_onboarding():
-    conn = sqlite3.connect(DB_FILE)
-    try: df = pd.read_sql_query("SELECT * FROM onboarding_details", conn)
-    except: df = pd.DataFrame()
-    conn.close()
-    return df
-
-def save_onboarding_details(data):
+def save_resource_entry(data, res_id=None):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("SELECT username FROM onboarding_details WHERE username=?", (data['username'],))
-    exists = c.fetchone()
-    cols = ['username', 'fullname', 'emp_id', 'tid', 'location', 'work_mode',
-            'hr_policy_briefing', 'it_system_setup', 'tid_active', 'team_centre_training',
-            'agt_access', 'ext_mail_id', 'rdp_access', 'avd_access', 'teamcenter_access',
-            'blocking_point', 'ticket_raised']
-    vals = [data.get(k) for k in cols]
-    if exists:
+    
+    cols = ['employee_name', 'employee_id', 'dev_code', 'department', 'location', 
+            'reporting_manager', 'onboarding_date', 'experience_level', 'status', 
+            'po_details', 'remarks', 'effective_exit_date', 'backfill_status', 'reason_for_leaving']
+            
+    vals = [str(data.get(k, '')) for k in cols]
+    
+    if res_id:
         set_clause = ", ".join([f"{col}=?" for col in cols])
-        c.execute(f"UPDATE onboarding_details SET {set_clause} WHERE username=?", (*vals, data['username']))
+        c.execute(f"UPDATE resource_tracker_v2 SET {set_clause} WHERE id=?", (*vals, res_id))
     else:
-        placeholders = ",".join(["?"] * len(cols))
-        c.execute(f"INSERT INTO onboarding_details VALUES ({placeholders})", vals)
+        new_id = str(uuid.uuid4())[:8]
+        placeholders = ",".join(["?"] * (len(cols) + 1))
+        c.execute(f"INSERT INTO resource_tracker_v2 VALUES ({placeholders})", (new_id, *vals))
+    conn.commit(); conn.close()
+
+def delete_resource_entry(res_id):
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute("DELETE FROM resource_tracker_v2 WHERE id=?", (res_id,))
     conn.commit(); conn.close()
 
 # --- PLOTLY HELPERS ---
@@ -355,7 +347,7 @@ def app_home():
             if st.button("Launch Training", use_container_width=True, type="primary"): st.session_state['current_app']='TRAINING'; st.rerun()
     with c3:
         with st.container(border=True):
-            st.markdown("### 🚀 **Resource Tracker**"); st.caption("Onboarding & Info")
+            st.markdown("### 🚀 **Resource Tracker**"); st.caption("Team Mgmt Only")
             if st.button("Launch Tracker", use_container_width=True, type="primary"): st.session_state['current_app']='RESOURCE'; st.rerun()
     with c4:
         with st.container(border=True):
@@ -363,7 +355,7 @@ def app_home():
             if st.button("View Radar", use_container_width=True): st.toast("🚧 Under Construction!", icon="👷")
 
 def parse_date(d):
-    if not d or d == 'None': return None
+    if not d or d == 'None' or d == '': return None
     try: return pd.to_datetime(d).date()
     except: return None
 
@@ -547,12 +539,12 @@ def app_training():
                     with c2:
                         c_stat = row['status']
                         n_stat = st.selectbox("Status", ["Not Started", "In Progress", "Completed"], 
-                                              index=["Not Started", "In Progress", "Completed"].index(c_stat), 
-                                              key=f"tr_stat_{row['id']}", label_visibility="collapsed")
+                                                index=["Not Started", "In Progress", "Completed"].index(c_stat), 
+                                                key=f"tr_stat_{row['id']}", label_visibility="collapsed")
                         if n_stat != c_stat:
                             update_training_status(st.session_state['name'], row['id'], n_stat); st.rerun()
 
-# --- RESOURCE TRACKER (Formerly Onboarding) ---
+# --- RESOURCE TRACKER APP (NEW) ---
 def app_resource():
     c1, c2 = st.columns([1, 6])
     with c1:
@@ -560,186 +552,155 @@ def app_resource():
     with c2: st.markdown("### 🚀 Resource Tracker")
     st.markdown("---")
 
-    # --- TEAM LEADER VIEW: CARD LINE ITEMS & EDIT ---
-    if st.session_state['role'] == "Team Leader":
-        # State for editing
-        if 'edit_res_user' not in st.session_state: st.session_state['edit_res_user'] = None
-        if 'add_res_mode' not in st.session_state: st.session_state['add_res_mode'] = False
+    # 🛑 ACCESS RESTRICTION: TEAM LEADERS ONLY 🛑
+    if st.session_state['role'] != "Team Leader":
+        st.error("🚫 ACCESS RESTRICTED")
+        st.warning(f"Hello {st.session_state['name']}, this module is restricted to Team Leaders and above.")
+        st.info("Please contact your administrator if you believe this is an error.")
+        return
 
-        # Header Row: Title + Add Button
-        h1, h2 = st.columns([4, 1])
-        with h1: st.markdown("#### Team Resources")
-        with h2: 
-            if st.button("➕ Add Resource", type="primary", use_container_width=True):
-                st.session_state['add_res_mode'] = True
-                st.session_state['edit_res_user'] = None
+    # --- STATE MANAGEMENT ---
+    if 'res_edit_id' not in st.session_state: st.session_state['res_edit_id'] = None
+    if 'res_view_mode' not in st.session_state: st.session_state['res_view_mode'] = 'LIST' # LIST or FORM
+
+    # --- LIST VIEW ---
+    if st.session_state['res_view_mode'] == 'LIST':
+        col_act, col_add = st.columns([5, 1])
+        with col_act:
+            st.markdown("#### Team Resources")
+        with col_add:
+            if st.button("➕ Add New", type="primary", use_container_width=True):
+                st.session_state['res_edit_id'] = None
+                st.session_state['res_view_mode'] = 'FORM'
                 st.rerun()
-
-        # ADD / EDIT FORM
-        if st.session_state['add_res_mode'] or st.session_state['edit_res_user']:
-            with st.container(border=True):
-                is_add = st.session_state['add_res_mode']
-                st.subheader("Add Resource" if is_add else f"Edit Resource: {st.session_state['edit_res_user']}")
-                
-                # Fetch existing data if editing
-                def_data = {}
-                if not is_add:
-                    df_res = get_all_onboarding()
-                    row = df_res[df_res['username'] == st.session_state['edit_res_user']]
-                    if not row.empty: def_data = row.iloc[0].to_dict()
-
-                with st.form("resource_form"):
-                    c1, c2, c3 = st.columns(3)
-                    # For Add Mode, we need manual inputs. For Edit, they might be read-only if from Login
-                    uname = c1.text_input("Username (Unique)", value=def_data.get('username',''), disabled=not is_add)
-                    fname = c2.text_input("Full Name", value=def_data.get('fullname',''))
-                    empid = c3.text_input("Emp ID", value=def_data.get('emp_id',''))
-                    
-                    c4, c5 = st.columns(2)
-                    tid_val = c4.text_input("TID", value=def_data.get('tid',''))
-                    loc_val = c5.selectbox("Location", ["Chennai", "Pune", "Bangalore", "Client Site"], index=0)
-                    
-                    st.markdown("---")
-                    st.markdown("**Access Control (Manager)**")
-                    m1, m2, m3 = st.columns(3)
-                    t_act = m1.checkbox("TID Active", value=bool(def_data.get('tid_active', 0)))
-                    e_mail = m2.checkbox("Ext. Mail Created", value=bool(def_data.get('ext_mail_id', 0)))
-                    tc_acc = m3.checkbox("Teamcenter Access", value=bool(def_data.get('teamcenter_access', 0)))
-
-                    if st.form_submit_button("💾 Save Resource"):
-                        if not uname: st.error("Username required"); st.stop()
-                        payload = {
-                            "username": uname, "fullname": fname, "emp_id": empid, "tid": tid_val,
-                            "location": loc_val, "tid_active": 1 if t_act else 0,
-                            "ext_mail_id": 1 if e_mail else 0, "teamcenter_access": 1 if tc_acc else 0,
-                            # Preserve or default others
-                            "work_mode": def_data.get('work_mode', 'Office'),
-                            "hr_policy_briefing": def_data.get('hr_policy_briefing', 0),
-                            "it_system_setup": def_data.get('it_system_setup', 0),
-                            "team_centre_training": def_data.get('team_centre_training', 0),
-                            "agt_access": def_data.get('agt_access', 0),
-                            "rdp_access": def_data.get('rdp_access', 0),
-                            "avd_access": def_data.get('avd_access', 0),
-                            "blocking_point": def_data.get('blocking_point', ''),
-                            "ticket_raised": def_data.get('ticket_raised', '')
-                        }
-                        save_onboarding_details(payload)
-                        st.success("Resource Saved")
-                        st.session_state['add_res_mode'] = False
-                        st.session_state['edit_res_user'] = None
-                        st.rerun()
-                
-                if st.button("Cancel"):
-                    st.session_state['add_res_mode'] = False
-                    st.session_state['edit_res_user'] = None
-                    st.rerun()
-            st.markdown("---")
-
-        # DISPLAY CARDS
-        df = get_all_onboarding()
+        
+        df = get_resource_list()
+        
         if not df.empty:
-            for idx, row in df.iterrows():
-                with st.container(border=True):
-                    # Layout: Avatar | Details | Status | Action
-                    c1, c2, c3, c4 = st.columns([1, 3, 2, 1])
-                    with c1:
-                        st.markdown("👤") # Placeholder icon
-                    with c2:
-                        st.markdown(f"**{row['fullname']}**")
-                        st.caption(f"{row['emp_id']} | {row['tid']}")
-                    with c3:
-                        st.caption("Onboarding Status")
-                        # Simple visual check
-                        if row['tid_active'] and row['ext_mail_id']:
-                            st.markdown("<span class='status-ok'>Active</span>", unsafe_allow_html=True)
-                        else:
-                            st.markdown("<span class='status-pending'>Pending Setup</span>", unsafe_allow_html=True)
-                    with c4:
-                        if st.button("Edit", key=f"res_edit_{row['username']}"):
-                            st.session_state['edit_res_user'] = row['username']
-                            st.session_state['add_res_mode'] = False
-                            st.rerun()
+            # Display as a dataframe with selection
+            # Custom visual dataframe
+            display_cols = ['employee_name', 'employee_id', 'department', 'status', 'location']
+            st.dataframe(df[display_cols], use_container_width=True, hide_index=True)
+            
+            st.markdown("##### Manage Entry")
+            sel_res = st.selectbox("Select Resource to Edit/View", df['employee_name'] + " (" + df['employee_id'] + ")")
+            
+            c_edit, c_del = st.columns([1, 5])
+            with c_edit:
+                if st.button("Edit Selected", use_container_width=True):
+                    # Find ID
+                    sel_id = df[df['employee_name'] + " (" + df['employee_id'] + ")" == sel_res].iloc[0]['id']
+                    st.session_state['res_edit_id'] = sel_id
+                    st.session_state['res_view_mode'] = 'FORM'
+                    st.rerun()
+            with c_del:
+                pass # Spacer
         else:
-            st.info("No resources found. Click 'Add Resource' to begin.")
+            st.info("No resources found in database.")
 
-    # --- MEMBER VIEW (Checklist) ---
-    else:
-        df = get_onboarding_details(st.session_state['user'])
-        defaults = df.iloc[0].to_dict() if not df.empty else {}
+    # --- FORM VIEW (ADD/EDIT) ---
+    elif st.session_state['res_view_mode'] == 'FORM':
+        res_id = st.session_state['res_edit_id']
+        is_edit = res_id is not None
+        
+        st.subheader("Edit Resource" if is_edit else "New Resource Onboarding")
+        
+        # Load Data if Edit
+        d = {}
+        if is_edit:
+            df = get_resource_list()
+            row = df[df['id'] == res_id]
+            if not row.empty: d = row.iloc[0].to_dict()
+
+        # We do NOT use st.form here to allow dynamic UI updates for "Inactive" status
         with st.container(border=True):
-            st.subheader("Resource Checklist")
-            st.markdown("##### 👤 Employee Details")
-            ac1, ac2, ac3 = st.columns(3)
-            ac1.text_input("Full Name", value=st.session_state['name'], disabled=True)
-            ac2.text_input("Employee ID", value=st.session_state['emp_id'], disabled=True)
-            ac3.text_input("TID", value=st.session_state['tid'], disabled=True)
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Field: Employee Name
+                emp_name = st.text_input("Employee Name", value=d.get('employee_name', ''))
+                # Field: DEV (Dropdown)
+                dev_opts = ["001", "002", "003", "005", "012", "016", "089"]
+                dev_val = d.get('dev_code', '001')
+                dev_code = st.selectbox("DEV", dev_opts, index=dev_opts.index(dev_val) if dev_val in dev_opts else 0, help="e.g., 001 to 016, 089 etc.")
+                # Field: Location
+                loc_opts = ["Chennai", "Bangalore", "Pune", "Remote"]
+                loc_val = d.get('location', 'Chennai')
+                location = st.selectbox("Location", loc_opts, index=loc_opts.index(loc_val) if loc_val in loc_opts else 0)
+                # Field: Onboarding Date
+                o_date = st.date_input("Onboarding Start Date", value=parse_date(d.get('onboarding_date')) or date.today())
+                # Field: Status (Triggers Logic)
+                stat_opts = ["Yet to start", "Active", "Inactive"]
+                stat_val = d.get('status', 'Yet to start')
+                status = st.selectbox("Status", stat_opts, index=stat_opts.index(stat_val) if stat_val in stat_opts else 0)
 
-            with st.form("onboarding_form"):
-                lc1, lc2 = st.columns(2)
-                loc = lc1.selectbox("Location", ["Chennai", "Pune", "Bangalore", "Client Site"], 
-                                    index=["Chennai", "Pune", "Bangalore", "Client Site"].index(defaults.get('location', 'Chennai')))
-                work_mode = lc2.selectbox("Work Mode", ["Office", "Remote"], 
-                                          index=["Office", "Remote"].index(defaults.get('work_mode', 'Office')))
+            with col2:
+                # Field: Employee ID
+                emp_id = st.text_input("Employee ID", value=d.get('employee_id', ''))
+                # Field: Department
+                dept_opts = ["Engineering", "Quality", "Manufacturing"]
+                dept_val = d.get('department', 'Engineering')
+                department = st.selectbox("Department", dept_opts, index=dept_opts.index(dept_val) if dept_val in dept_opts else 0)
+                # Field: Reporting Manager
+                rep_man = st.selectbox("Reporting Manager", ["Sarah Jenkins", "Mike Ross", "Harvey Specter"], index=0) # Demo list
+                # Field: Experience Level
+                exp_opts = ["JUNIOR", "MID", "ADVANCED", "SENIOR", "EXPERT"]
+                exp_val = d.get('experience_level', 'JUNIOR')
+                exp_lvl = st.selectbox("Experience Level", exp_opts, index=exp_opts.index(exp_val) if exp_val in exp_opts else 0)
+                # Field: PO Details
+                po_det = st.text_input("PO Details", value=d.get('po_details', ''), placeholder="PO number")
 
+            # Field: Remarks (Full Width)
+            remarks = st.text_area("Remarks if any", value=d.get('remarks', ''))
+
+            # --- CONDITIONAL BRANCHING FOR INACTIVE ---
+            exit_date = None
+            backfill = "No"
+            reason = ""
+            
+            if status == "Inactive":
                 st.markdown("---")
-                st.markdown("##### ✅ Checklist")
-                r1c1, r1c2, r1c3 = st.columns(3)
-                hr_pol = r1c1.checkbox("HR Policy Briefing", value=bool(defaults.get('hr_policy_briefing', 0)))
-                it_set = r1c2.checkbox("IT System Setup", value=bool(defaults.get('it_system_setup', 0)))
-                tc_trn = r1c3.checkbox("Team Centre Training", value=bool(defaults.get('team_centre_training', 0)))
+                st.warning("⚠️ Resource Inactive - Exit Details Required")
+                ec1, ec2, ec3 = st.columns(3)
+                with ec1:
+                    exit_date = st.date_input("Effective Exit Date", value=parse_date(d.get('effective_exit_date')) or date.today())
+                with ec2:
+                    bf_val = d.get('backfill_status', 'No')
+                    backfill = st.selectbox("Backfill Status", ["Yes", "No"], index=["Yes", "No"].index(bf_val) if bf_val in ["Yes", "No"] else 1)
+                with ec3:
+                    reason = st.text_input("Reason for Leaving", value=d.get('reason_for_leaving', ''))
 
-                st.write("")
-                st.markdown("**Remote / Access Validations**")
-                r2c1, r2c2, r2c3 = st.columns(3)
-                agt_val = bool(defaults.get('agt_access', 0))
-                rdp_val = bool(defaults.get('rdp_access', 0))
-                avd_val = bool(defaults.get('avd_access', 0))
-                
-                if work_mode == "Remote":
-                    r2c1.markdown("*(Required)*")
-                    agt = r2c1.checkbox("AGT Access", value=agt_val)
-                    r2c2.markdown("*(Required)*")
-                    rdp = r2c2.checkbox("RDP Access", value=rdp_val)
-                    r2c3.markdown("*(Required)*")
-                    avd = r2c3.checkbox("AVD Access", value=avd_val)
-                else:
-                    r2c1.markdown("*(N/A)*"); agt = r2c1.checkbox("AGT Access", value=agt_val, disabled=True)
-                    r2c2.markdown("*(N/A)*"); rdp = r2c2.checkbox("RDP Access", value=rdp_val, disabled=True)
-                    r2c3.markdown("*(N/A)*"); avd = r2c3.checkbox("AVD Access", value=avd_val, disabled=True)
-
-                st.markdown("---")
-                st.markdown("##### 🔒 Manager / IT Approvals (Read Only)")
-                m1, m2, m3 = st.columns(3)
-                m1.checkbox("TID Active", value=bool(defaults.get('tid_active', 0)), disabled=True)
-                m2.checkbox("External Mail ID", value=bool(defaults.get('ext_mail_id', 0)), disabled=True)
-                m3.checkbox("Teamcenter Access", value=bool(defaults.get('teamcenter_access', 0)), disabled=True)
-
-                st.markdown("---")
-                st.markdown("##### ⚠️ Issues")
-                bp = st.text_input("Blocking Point (If any)", value=defaults.get('blocking_point', ''))
-                
-                ticket_action = defaults.get('ticket_raised', '')
-                raise_ticket = False
-                if bp:
-                    st.warning("Blocking point detected.")
-                    if ticket_action: st.success(f"Ticket Raised: {ticket_action}")
-                    else: raise_ticket = st.checkbox("Raise IT Ticket?")
-
-                if st.form_submit_button("💾 Save Form", type="primary"):
-                    new_ticket_status = ticket_action
-                    if raise_ticket and not ticket_action: new_ticket_status = f"TKT-{str(uuid.uuid4())[:6]}"
-                    payload = {
-                        "username": st.session_state['user'], "fullname": st.session_state['name'],
-                        "emp_id": st.session_state['emp_id'], "tid": st.session_state['tid'],
-                        "location": loc, "work_mode": work_mode,
-                        "hr_policy_briefing": 1 if hr_pol else 0, "it_system_setup": 1 if it_set else 0,
-                        "tid_active": defaults.get('tid_active', 0), "team_centre_training": 1 if tc_trn else 0,
-                        "agt_access": 1 if agt else 0, "ext_mail_id": defaults.get('ext_mail_id', 0),
-                        "rdp_access": 1 if rdp else 0, "avd_access": 1 if avd else 0,
-                        "teamcenter_access": defaults.get('teamcenter_access', 0),
-                        "blocking_point": bp, "ticket_raised": new_ticket_status
-                    }
-                    save_onboarding_details(payload); st.success("Saved!"); st.rerun()
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # ACTIONS
+            b1, b2 = st.columns([1, 1])
+            with b1:
+                if st.button("Cancel", use_container_width=True):
+                    st.session_state['res_view_mode'] = 'LIST'
+                    st.session_state['res_edit_id'] = None
+                    st.rerun()
+            with b2:
+                if st.button("💾 Save Record", type="primary", use_container_width=True):
+                    # Validation
+                    if not emp_name or not emp_id:
+                        st.error("Name and Employee ID are required.")
+                    elif status == "Inactive" and not reason:
+                        st.error("Reason for Leaving is mandatory for Inactive status.")
+                    else:
+                        payload = {
+                            "employee_name": emp_name, "employee_id": emp_id, "dev_code": dev_code,
+                            "department": department, "location": location, "reporting_manager": rep_man,
+                            "onboarding_date": str(o_date), "experience_level": exp_lvl, "status": status,
+                            "po_details": po_det, "remarks": remarks,
+                            "effective_exit_date": str(exit_date) if exit_date else "",
+                            "backfill_status": backfill if status == "Inactive" else "",
+                            "reason_for_leaving": reason if status == "Inactive" else ""
+                        }
+                        save_resource_entry(payload, res_id)
+                        st.success("Resource Saved Successfully!")
+                        st.session_state['res_view_mode'] = 'LIST'
+                        st.session_state['res_edit_id'] = None
+                        st.rerun()
 
 # ---------- MAIN CONTROLLER ----------
 def main():
@@ -764,7 +725,7 @@ def main():
         if app == 'HOME': app_home()
         elif app == 'KPI': app_kpi()
         elif app == 'TRAINING': app_training()
-        elif app == 'RESOURCE': app_resource() # Renamed Routing
+        elif app == 'RESOURCE': app_resource() # Updated App
 
 if __name__ == "__main__":
     main()
