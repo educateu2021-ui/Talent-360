@@ -57,159 +57,75 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ---------- DATABASE & SEEDING ----------
-DB_FILE = "portal_data_v16_full_demo.db"
-
-def generate_demo_data(c):
-    # --- HELPER DATA LISTS ---
-    first_names = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Elizabeth", "David", "Barbara", "Richard", "Susan", "Joseph", "Jessica", "Thomas", "Sarah", "Charles", "Karen"]
-    last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin"]
-    depts = ["Engineering", "Quality", "Manufacturing", "Finance", "HR"]
-    locs = ["Chennai", "Bangalore", "Pune", "Remote", "Hyderabad"]
-    roles = ["Team Member", "Team Member", "Team Member", "Team Leader"] # Weighted
-    
-    generated_users = []
-
-    # 1. SEED USERS (20 Items)
-    c.execute("SELECT count(*) FROM users")
-    if c.fetchone()[0] == 0:
-        # Default Admin
-        c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
-                  ("admin", "admin123", "Super Admin", "System Admin", "ADM-000", "https://cdn-icons-png.flaticon.com/512/3135/3135715.png", str(date.today())))
-        
-        for i in range(20):
-            fn = first_names[i % len(first_names)]
-            ln = last_names[i % len(last_names)]
-            name = f"{fn} {ln}"
-            role = "Team Leader" if i < 4 else "Team Member" # 4 Leads, rest Members
-            username = f"{fn.lower()}{i}"
-            password = "123" # Simple demo password
-            emp_id = f"EMP-{100+i}"
-            img = f"https://ui-avatars.com/api/?name={fn}+{ln}&background=random"
-            
-            c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", (username, password, role, name, emp_id, img, str(date.today())))
-            generated_users.append(name) # Keep track for assigning tasks
-
-    # 2. SEED RESOURCES (20 Items)
-    c.execute("SELECT count(*) FROM resource_tracker_v4")
-    if c.fetchone()[0] == 0:
-        for i in range(20):
-            fn = first_names[i % len(first_names)]
-            ln = last_names[i % len(last_names)]
-            name = f"{fn} {ln}"
-            
-            status = random.choice(["Active", "Active", "Active", "Inactive", "Yet to start"])
-            dept = random.choice(depts)
-            hourly = random.randint(15, 60)
-            hw_cost = random.choice([2, 5, 8])
-            
-            # Logic for inactive
-            exit_date = ""
-            reason = ""
-            backfill = ""
-            if status == "Inactive":
-                exit_date = str(date.today() - timedelta(days=random.randint(1, 100)))
-                reason = random.choice(["Resigned", "Relocation", "Better Offer"])
-                backfill = random.choice(["Yes", "No"])
-
-            c.execute("INSERT INTO resource_tracker_v4 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", 
-                      (str(uuid.uuid4())[:8], name, f"EMP-{100+i}", f"DEV-00{random.randint(1,9)}", 
-                       dept, random.choice(locs), "Sarah Jenkins", 
-                       str(date.today() - timedelta(days=random.randint(50, 500))),
-                       random.choice(["JUNIOR", "MID", "SENIOR", "EXPERT"]),
-                       status, f"PO-{random.randint(1000,9999)}", "Generated Data",
-                       exit_date, backfill, reason, str(hourly), str(hw_cost)))
-
-    # 3. SEED KPI TASKS (20 Items)
-    c.execute("SELECT count(*) FROM tasks_v2")
-    if c.fetchone()[0] == 0:
-        pilots = generated_users if generated_users else ["Demo User"]
-        for i in range(1, 21):
-            pilot = random.choice(pilots)
-            status = random.choice(["Completed", "Inprogress", "Hold", "Cancelled"])
-            start = date.today() - timedelta(days=random.randint(10, 60))
-            due = start + timedelta(days=random.randint(5, 20))
-            
-            actual = None
-            otd = "N/A"
-            ftr = "Yes" if random.random() > 0.3 else "No"
-
-            if status == "Completed":
-                delay = random.choice([-2, -1, 0, 1, 5, 10])
-                actual = due + timedelta(days=delay)
-                otd = "OK" if actual <= due else "NOT OK"
-                str_actual = str(actual)
-            else:
-                str_actual = ""
-
-            c.execute("INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                      (str(uuid.uuid4())[:8], pilot, f"Project Task {i:02d}", str(start), str_actual, str(due),
-                       status, ftr, f"REF-{random.randint(1000,9999)}", "Yes", otd, 
-                       f"Description for task {i} related to engineering.", "Standard", 
-                       "Yes", str(start), otd, "None", "QA-Ref", "Lead-X", "Mgr-Y"))
-
-    # 4. SEED TRAINING (20 Items)
-    c.execute("SELECT count(*) FROM training_repo")
-    if c.fetchone()[0] == 0:
-        topics = [
-            ("Python Basics", "Intro to Python"), ("Advanced Excel", "Pivot tables & Macros"), 
-            ("Safety First", "Fire safety protocols"), ("Leadership 101", "Managing teams"),
-            ("Data Privacy", "GDPR & Compliance"), ("Agile Methodologies", "Scrum basics"),
-            ("Communication", "Effective email writing"), ("Cyber Security", "Phishing awareness"),
-            ("Cloud Computing", "AWS Fundamentals"), ("Project Management", "PMP Basics"),
-            ("Time Management", "Pomodoro technique"), ("Conflict Resolution", "HR guidelines"),
-            ("Diversity & Inclusion", "Workplace culture"), ("SQL for Beginners", "Database queries"),
-            ("React JS", "Frontend basics"), ("Streamlit", "Python Dashboards"),
-            ("DevOps", "CI/CD Pipelines"), ("Machine Learning", "Intro to AI"),
-            ("Negotiation Skills", "Sales tactics"), ("Mental Health", "Work-life balance")
-        ]
-        
-        for t in topics:
-            c.execute("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)",
-                      (str(uuid.uuid4())[:8], t[0], t[1], "https://example.com", 
-                       random.choice(["All", "Team Leader", "Team Member"]), 
-                       random.choice([0, 1]), "System"))
+# ---------- DATABASE ----------
+DB_FILE = "portal_data_final_v16_admin.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
-    # Create Tables
+    # 1. USER TABLE (New for Super Admin)
     c.execute('''CREATE TABLE IF NOT EXISTS users (
-        username TEXT PRIMARY KEY, password TEXT, role TEXT, name TEXT, 
-        emp_id TEXT, img TEXT, created_at TEXT)''')
+        username TEXT PRIMARY KEY, 
+        password TEXT, 
+        role TEXT, 
+        name TEXT, 
+        emp_id TEXT, 
+        img TEXT,
+        created_at TEXT
+    )''')
 
+    # 2. KPI Table
     c.execute('''CREATE TABLE IF NOT EXISTS tasks_v2 (
         id TEXT PRIMARY KEY, name_activity_pilot TEXT, task_name TEXT, date_of_receipt TEXT,
         actual_delivery_date TEXT, commitment_date_to_customer TEXT, status TEXT,
         ftr_customer TEXT, reference_part_number TEXT, ftr_internal TEXT, otd_internal TEXT,
         description_of_activity TEXT, activity_type TEXT, ftr_quality_gate_internal TEXT,
         date_of_clarity_in_input TEXT, start_date TEXT, otd_customer TEXT, customer_remarks TEXT,
-        name_quality_gate_referent TEXT, project_lead TEXT, customer_manager_name TEXT)''')
+        name_quality_gate_referent TEXT, project_lead TEXT, customer_manager_name TEXT
+    )''')
     
+    # 3. Training Tables
     c.execute('''CREATE TABLE IF NOT EXISTS training_repo (
         id TEXT PRIMARY KEY, title TEXT, description TEXT, link TEXT, 
-        role_target TEXT, mandatory INTEGER, created_by TEXT)''')
-    
+        role_target TEXT, mandatory INTEGER, created_by TEXT
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS training_progress (
         user_name TEXT, training_id TEXT, status TEXT, 
-        last_updated TEXT, PRIMARY KEY (user_name, training_id))''')
+        last_updated TEXT, PRIMARY KEY (user_name, training_id)
+    )''')
     
+    # 4. RESOURCE TRACKER TABLE
     c.execute('''CREATE TABLE IF NOT EXISTS resource_tracker_v4 (
         id TEXT PRIMARY KEY, employee_name TEXT, employee_id TEXT, dev_code TEXT,
         department TEXT, location TEXT, reporting_manager TEXT, onboarding_date TEXT,
         experience_level TEXT, status TEXT, po_details TEXT, remarks TEXT,
         effective_exit_date TEXT, backfill_status TEXT, reason_for_leaving TEXT,
-        hourly_rate TEXT, hardware_daily_cost TEXT)''')
+        hourly_rate TEXT, hardware_daily_cost TEXT
+    )''')
     
-    # Inject Data
-    generate_demo_data(c)
+    # --- SEED DEFAULT SUPER ADMIN ---
+    c.execute("SELECT count(*) FROM users WHERE role='Super Admin'")
+    if c.fetchone()[0] == 0:
+        # Default Admin: admin / admin123
+        c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
+                  ("admin", "admin123", "Super Admin", "System Admin", "ADM-001", "https://cdn-icons-png.flaticon.com/512/3135/3135715.png", str(date.today())))
+        
+        # Seed Demo Users if empty
+        users_demo = [
+            ("leader", "123", "Team Leader", "Sarah Jenkins", "LDR-001", "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200", str(date.today())),
+            ("member1", "123", "Team Member", "David Chen", "EMP-101", "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200", str(date.today()))
+        ]
+        for u in users_demo:
+            try: c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", u)
+            except: pass
 
     conn.commit()
     conn.close()
 
 # ---------- UTILS & HELPERS ----------
 
+# --- USER ADMIN HELPERS ---
 def generate_temp_password(length=8):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for i in range(length))
@@ -252,6 +168,7 @@ def import_users_csv(file):
         return True
     except: return False
 
+# --- KPI HELPERS ---
 def get_kpi_data():
     conn = sqlite3.connect(DB_FILE)
     try: df = pd.read_sql_query("SELECT * FROM tasks_v2", conn)
@@ -301,6 +218,7 @@ def import_kpi_csv(file):
         return True
     except: return False
 
+# --- TRAINING HELPERS ---
 def add_training(title, desc, link, role, mandatory, creator):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -327,6 +245,7 @@ def update_training_status(user_name, training_id, status):
               (user_name, training_id, status, str(date.today())))
     conn.commit(); conn.close()
 
+# --- RESOURCE TRACKER HELPERS ---
 def get_resource_list():
     conn = sqlite3.connect(DB_FILE)
     try: df = pd.read_sql_query("SELECT * FROM resource_tracker_v4", conn)
@@ -352,6 +271,7 @@ def save_resource_entry(data, res_id=None):
         c.execute(f"INSERT INTO resource_tracker_v4 VALUES ({placeholders})", (new_id, *vals))
     conn.commit(); conn.close()
 
+# --- PLOTLY HELPERS ---
 def get_analytics_chart(df):
     if df.empty: return go.Figure()
     df_local = df.copy()
@@ -371,7 +291,7 @@ def get_donut(df):
                       annotations=[dict(text=f"FTR {pct}%", x=0.5, y=0.5, showarrow=False, font=dict(size=16))])
     return fig
 
-# ---------- AUTH ----------
+# ---------- AUTH (UPDATED) ----------
 def login_page():
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1, 1])
@@ -404,8 +324,11 @@ def app_home():
     st.caption(f"ID: {st.session_state.get('emp_id')} | Role: {st.session_state.get('role')}")
     st.write("---")
     
+    # DYNAMIC COLUMNS BASED ON ROLE
     if st.session_state['role'] == 'Super Admin':
         c_adm, c1, c2, c3 = st.columns(4)
+        
+        # 👑 SUPER ADMIN CARD (ONLY VISIBLE TO SUPER ADMIN)
         with c_adm:
             with st.container(border=True):
                 st.markdown("### 🛡️ **User Admin**")
@@ -427,6 +350,7 @@ def app_home():
     with c3:
         with st.container(border=True):
             st.markdown("### 🚀 **Tracker**"); st.caption("HR & Finance")
+            # Only Team Lead and Super Admin can see Resource Tracker
             if st.session_state['role'] in ['Team Leader', 'Super Admin']:
                 if st.button("Launch Tracker", use_container_width=True): st.session_state['current_app']='RESOURCE'; st.rerun()
             else:
@@ -437,7 +361,7 @@ def parse_date(d):
     try: return pd.to_datetime(d).date()
     except: return None
 
-# --- ADMIN APP ---
+# --- ADMIN APP (NEW) ---
 def app_admin():
     c1, c2 = st.columns([1, 6])
     with c1:
@@ -445,6 +369,7 @@ def app_admin():
     with c2: st.markdown("### 🛡️ Super Admin Control Panel")
     st.markdown("---")
 
+    # State for Edit
     if 'admin_mode' not in st.session_state: st.session_state['admin_mode'] = 'TABLE'
     if 'admin_edit_user' not in st.session_state: st.session_state['admin_edit_user'] = None
 
@@ -452,6 +377,7 @@ def app_admin():
 
     with t1:
         if st.session_state['admin_mode'] == 'TABLE':
+            # --- TABLE VIEW ---
             col_act, col_add = st.columns([5, 1])
             with col_act: st.info("Manage portal access, reset passwords, and assign roles.")
             with col_add: 
@@ -461,10 +387,15 @@ def app_admin():
                     st.rerun()
             
             df = get_all_users()
+            # Hide password in table for security
             display_df = df.drop(columns=['password'])
+            
+            # Interactive Editor
             edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="user_editor")
             
             st.caption("Select a user from the dropdown below to Edit fully or Reset Password.")
+            
+            # Action Row
             ac1, ac2, ac3 = st.columns([2, 1, 1])
             with ac1:
                 sel_user = st.selectbox("Select User to Modify", df['username'], label_visibility="collapsed")
@@ -481,7 +412,9 @@ def app_admin():
                         st.success(f"User {sel_user} deleted."); st.rerun()
 
         elif st.session_state['admin_mode'] == 'FORM':
+            # --- FORM VIEW (Resource Tracker Style) ---
             st.subheader("User Account Details")
+            
             is_edit = st.session_state['admin_edit_user'] is not None
             u_data = {}
             if is_edit:
@@ -497,12 +430,15 @@ def app_admin():
                                         index=["Team Member", "Team Leader", "Super Admin"].index(u_data.get('role','Team Member')))
                 with f2:
                     emp_id = st.text_input("Employee ID Link", value=u_data.get('emp_id',''))
+                    
+                    # Password Handling
                     if not is_edit:
                         temp_pass = generate_temp_password()
                         password = st.text_input("Password (Auto-Generated Temp)", value=temp_pass)
                         st.info(f"📝 Note this temporary password: **{password}**")
                     else:
                         password = st.text_input("Reset Password (Leave as is to keep current)", value=u_data.get('password',''))
+                    
                     img = st.text_input("Profile Image URL", value=u_data.get('img','https://cdn-icons-png.flaticon.com/512/3135/3135715.png'))
 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -515,7 +451,10 @@ def app_admin():
                         if not username or not password:
                             st.error("Username and Password are required.")
                         else:
-                            payload = {'username': username, 'password': password, 'role': role, 'name': name, 'emp_id': emp_id, 'img': img}
+                            payload = {
+                                'username': username, 'password': password, 'role': role,
+                                'name': name, 'emp_id': emp_id, 'img': img
+                            }
                             save_user_entry(payload, is_update=is_edit)
                             st.success("User saved successfully!")
                             st.session_state['admin_mode'] = 'TABLE'
@@ -530,7 +469,9 @@ def app_admin():
                 if import_users_csv(up_users): st.success("Users Imported!"); st.rerun()
         with c_exp:
             df_exp = get_all_users()
-            st.download_button("Download User Database (CSV)", data=df_exp.to_csv(index=False).encode('utf-8'), file_name="portal_users.csv", mime="text/csv", use_container_width=True)
+            st.download_button("Download User Database (CSV)", 
+                               data=df_exp.to_csv(index=False).encode('utf-8'), 
+                               file_name="portal_users.csv", mime="text/csv", use_container_width=True)
 
 # --- FULL KPI APP ---
 def app_kpi():
@@ -540,10 +481,13 @@ def app_kpi():
     with c2: st.markdown("### 📊 KPI Management System")
     st.markdown("---")
     
+    # PERMISSION CHECK
     is_lead = st.session_state['role'] in ["Team Leader", "Super Admin"]
     
     if is_lead:
         df = get_kpi_data()
+        
+        # 1. Editor
         if 'edit_kpi_id' not in st.session_state: st.session_state['edit_kpi_id'] = None
         if st.session_state['edit_kpi_id']:
             with st.container(border=True):
@@ -556,6 +500,7 @@ def app_kpi():
 
                 with st.form("kpi_editor_form"):
                     c1, c2, c3 = st.columns(3)
+                    # Fetch real users for dropdown
                     u_df = get_all_users()
                     pilots = u_df[u_df['role'] == "Team Member"]['name'].tolist()
                     if not pilots: pilots = ["Generic Pilot"]
@@ -603,6 +548,7 @@ def app_kpi():
                     st.session_state['edit_kpi_id'] = None; st.rerun()
             st.markdown("---")
 
+        # 2. Dashboard
         if not st.session_state['edit_kpi_id']:
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Tasks", len(df))
@@ -638,6 +584,7 @@ def app_kpi():
                         with c_meta:
                             st.caption(f"👤 {row.get('name_activity_pilot','-')}")
                             st.caption(f"📅 Due: {row.get('commitment_date_to_customer','-')}")
+                            # Status Badge
                             st_color = "black"
                             if row['status'] == "Completed": st_color = "#10b981"
                             elif row['status'] == "Cancelled": st_color = "#ef4444"
@@ -649,6 +596,7 @@ def app_kpi():
                                 st.session_state['edit_kpi_id'] = row['id']; st.rerun()
             else: st.info("No tasks found.")
 
+    # MEMBER VIEW
     else:
         df = get_kpi_data()
         my_tasks = df[df['name_activity_pilot'] == st.session_state['name']]
@@ -678,6 +626,7 @@ def app_training():
     with c2: st.markdown("### 🎓 Training Hub")
     st.markdown("---")
     
+    # PERMISSION: Lead or Admin
     if st.session_state['role'] in ["Team Leader", "Super Admin"]:
         t1, t2 = st.tabs(["Repository", "Add New"])
         with t1:
@@ -730,23 +679,29 @@ def app_resource():
     with c2: st.markdown("### 🚀 Resource Tracker")
     st.markdown("---")
 
+    # 🛑 ACCESS RESTRICTION: TEAM LEADERS & SUPER ADMIN ONLY 🛑
     if st.session_state['role'] not in ["Team Leader", "Super Admin"]:
         st.error("🚫 ACCESS RESTRICTED")
         return
 
+    # --- STATE MANAGEMENT ---
     if 'res_edit_id' not in st.session_state: st.session_state['res_edit_id'] = None
     if 'res_view_mode' not in st.session_state: st.session_state['res_view_mode'] = 'LIST' 
 
+    # --- LIST VIEW WITH FILTERS ---
     if st.session_state['res_view_mode'] == 'LIST':
+        
+        # 1. SEARCH & FILTERS SECTION
         with st.expander("🔎 Search & Filters", expanded=False):
             fc1, fc2, fc3 = st.columns(3)
             with fc1:
                 search_query = st.text_input("Search Name/ID/Dev", placeholder="Type to search...")
             with fc2:
-                dept_filter = st.multiselect("Filter Department", ["Engineering", "Quality", "Manufacturing", "Finance", "HR"])
+                dept_filter = st.multiselect("Filter Department", ["Engineering", "Quality", "Manufacturing"])
             with fc3:
                 stat_filter = st.multiselect("Filter Status", ["Active", "Inactive", "Yet to start"])
 
+        # 2. DATA TABLE & ACTIONS
         col_act, col_add = st.columns([5, 1])
         with col_act:
             st.markdown("#### Resource List")
@@ -766,6 +721,7 @@ def app_resource():
             if stat_filter:
                 df = df[df['status'].isin(stat_filter)]
             
+            # Derived Costs
             df['hourly_rate'] = pd.to_numeric(df['hourly_rate'], errors='coerce').fillna(0)
             df['hardware_daily_cost'] = pd.to_numeric(df['hardware_daily_cost'], errors='coerce').fillna(0)
             df['Daily_Labor_Cost_$'] = df['hourly_rate'] * 8
@@ -789,10 +745,13 @@ def app_resource():
         else:
             st.info("No resources found in database.")
 
+    # --- FORM VIEW (ADD/EDIT) ---
     elif st.session_state['res_view_mode'] == 'FORM':
         res_id = st.session_state['res_edit_id']
         is_edit = res_id is not None
+        
         st.subheader("Edit Resource" if is_edit else "New Resource Onboarding")
+        
         d = {}
         if is_edit:
             df = get_resource_list()
@@ -801,12 +760,13 @@ def app_resource():
 
         with st.container(border=True):
             col1, col2 = st.columns(2)
+            
             with col1:
                 emp_name = st.text_input("Employee Name", value=d.get('employee_name', ''))
                 dev_opts = ["001", "002", "003", "005", "012", "016", "089"]
                 dev_val = d.get('dev_code', '001')
                 dev_code = st.selectbox("DEV", dev_opts, index=dev_opts.index(dev_val) if dev_val in dev_opts else 0)
-                loc_opts = ["Chennai", "Bangalore", "Pune", "Remote", "Hyderabad"]
+                loc_opts = ["Chennai", "Bangalore", "Pune", "Remote"]
                 loc_val = d.get('location', 'Chennai')
                 location = st.selectbox("Location", loc_opts, index=loc_opts.index(loc_val) if loc_val in loc_opts else 0)
                 o_date = st.date_input("Onboarding Start Date", value=parse_date(d.get('onboarding_date')) or date.today())
@@ -816,7 +776,7 @@ def app_resource():
 
             with col2:
                 emp_id_val = st.text_input("Employee ID", value=d.get('employee_id', ''))
-                dept_opts = ["Engineering", "Quality", "Manufacturing", "Finance", "HR"]
+                dept_opts = ["Engineering", "Quality", "Manufacturing"]
                 dept_val = d.get('department', 'Engineering')
                 department = st.selectbox("Department", dept_opts, index=dept_opts.index(dept_val) if dept_val in dept_opts else 0)
                 rep_man = st.selectbox("Reporting Manager", ["Sarah Jenkins", "Mike Ross", "Harvey Specter"], index=0)
@@ -839,6 +799,7 @@ def app_resource():
                 st.metric("Total Daily Bill", f"${tot_daily:,.2f}")
 
             remarks = st.text_area("Remarks if any", value=d.get('remarks', ''))
+
             exit_date = None
             backfill = "No"
             reason = ""
@@ -856,6 +817,7 @@ def app_resource():
                     reason = st.text_input("Reason for Leaving", value=d.get('reason_for_leaving', ''))
 
             st.markdown("<br>", unsafe_allow_html=True)
+            
             b1, b2 = st.columns([1, 1])
             with b1:
                 if st.button("Cancel", use_container_width=True):
@@ -877,7 +839,8 @@ def app_resource():
                             "effective_exit_date": str(exit_date) if exit_date else "",
                             "backfill_status": backfill if status == "Inactive" else "",
                             "reason_for_leaving": reason if status == "Inactive" else "",
-                            "hourly_rate": str(hr_rate), "hardware_daily_cost": str(hw_cost)
+                            "hourly_rate": str(hr_rate),
+                            "hardware_daily_cost": str(hw_cost)
                         }
                         save_resource_entry(payload, res_id)
                         st.success("Resource Saved Successfully!")
