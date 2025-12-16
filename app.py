@@ -625,7 +625,7 @@ def app_onboarding():
             st.session_state['current_app'] = 'HOME'
             st.rerun()
     with c2:
-        st.markdown("### 🚀 Resource Tracker")
+        st.markdown("### 🚀 Onboarding")
     st.markdown("---")
 
     if st.session_state['role'] == "Team Leader":
@@ -689,7 +689,7 @@ def main():
         if app == 'HOME': app_home()
         elif app == 'KPI': app_kpi()
         elif app == 'TRAINING': app_training()
-        elif app == 'ONBOARDING': app_onboarding()
+        elif app == 'Resource Tracker': app_onboarding()
 
 if __name__ == "__main__":
     main()
