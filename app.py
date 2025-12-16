@@ -57,7 +57,7 @@ st.markdown(
 )
 
 # ---------- DATABASE ----------
-DB_FILE = "portal_data_final_v11.db"
+DB_FILE = "portal_data_final_v12.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -83,7 +83,7 @@ def init_db():
         last_updated TEXT, PRIMARY KEY (user_name, training_id)
     )''')
     
-    # 3. Resource Tracker Table (Formerly Onboarding)
+    # 3. Resource Tracker Table
     c.execute('''CREATE TABLE IF NOT EXISTS onboarding_details (
         username TEXT PRIMARY KEY,
         fullname TEXT,
@@ -306,6 +306,8 @@ def app_home():
     st.caption(f"ID: {st.session_state.get('emp_id')} | TID: {st.session_state.get('tid')}")
     st.write("---")
     
+    # 2x2 GRID LOGIC (Fixes Mobile Stacking)
+    # Row 1
     r1c1, r1c2 = st.columns(2)
     with r1c1:
         with st.container(border=True):
@@ -316,6 +318,7 @@ def app_home():
             st.markdown("### 🎓 **Training**"); st.caption("Track Progress")
             if st.button("Launch Training", use_container_width=True, type="primary"): st.session_state['current_app']='TRAINING'; st.rerun()
     
+    # Row 2
     r2c1, r2c2 = st.columns(2)
     with r2c1:
         with st.container(border=True):
