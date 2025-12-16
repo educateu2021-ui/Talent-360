@@ -58,7 +58,7 @@ st.markdown(
 )
 
 # ---------- DATABASE & SEEDING ----------
-DB_FILE = "portal_data_v17_full_demo.db"
+DB_FILE = "portal_data_v16_full_demo.db"
 
 def generate_demo_data(c):
     # --- HELPER DATA LISTS ---
