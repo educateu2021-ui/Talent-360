@@ -345,12 +345,10 @@ def save_resource_entry(data, res_id=None):
 def import_resource_csv(file):
     try:
         df = pd.read_csv(file)
-        # Add basic validation/defaulting if needed
         cols = ['employee_name', 'employee_id', 'dev_code', 'department', 'location', 
                 'reporting_manager', 'onboarding_date', 'experience_level', 'status', 
                 'po_details', 'remarks', 'effective_exit_date', 'backfill_status', 
                 'reason_for_leaving', 'hourly_rate', 'hardware_daily_cost']
-        
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
         for _, row in df.iterrows():
@@ -703,30 +701,47 @@ def app_training():
                     if up_train:
                         if import_training_csv(up_train): st.success("Trainings Imported!"); st.rerun()
                 with col_exp:
-                    # Provide template if empty, else data
                     if not df.empty:
                         csv = df.to_csv(index=False).encode('utf-8')
                         st.download_button("Download CSV", data=csv, file_name="training_repo.csv", mime="text/csv", use_container_width=True)
                     else:
-                        # Template
                         tpl = pd.DataFrame(columns=['title', 'description', 'link', 'role_target', 'mandatory'])
                         csv = tpl.to_csv(index=False).encode('utf-8')
                         st.download_button("Download Template CSV", data=csv, file_name="training_template.csv", mime="text/csv", use_container_width=True)
 
-            # DATA DISPLAY WITH DELETE BUTTON
+            # DATA EDITOR WITH DELETE
             if not df.empty:
-                st.markdown("#### Published Modules")
-                for idx, row in df.iterrows():
-                    with st.container(border=True):
-                        c_main, c_btn = st.columns([5, 1])
-                        with c_main:
-                            st.markdown(f"**{row['title']}**")
-                            st.caption(f"{row['description']} | Target: {row['role_target']}")
-                            st.markdown(f"[Link]({row['link']})")
-                        with c_btn:
-                            if st.button("🗑️ Delete", key=f"del_tr_{row['id']}", type="primary"):
+                st.markdown("#### Manage Modules")
+                
+                # Add selection column for deletion
+                df_editor = df.copy()
+                df_editor.insert(0, "Select", False)
+                
+                # Configure columns
+                edited_df = st.data_editor(
+                    df_editor,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Select": st.column_config.CheckboxColumn("Select", help="Select to delete"),
+                        "id": st.column_config.TextColumn("ID", disabled=True),
+                        "link": st.column_config.LinkColumn("Link"),
+                        "created_by": st.column_config.TextColumn("Creator", disabled=True)
+                    }
+                )
+                
+                # Action Buttons
+                col_save, _ = st.columns([1, 4])
+                with col_save:
+                    if st.button("🗑️ Delete Selected", type="primary"):
+                        to_delete = edited_df[edited_df['Select'] == True]
+                        if not to_delete.empty:
+                            for _, row in to_delete.iterrows():
                                 delete_training(row['id'])
-                                st.rerun()
+                            st.success(f"Deleted {len(to_delete)} modules.")
+                            st.rerun()
+                        else:
+                            st.warning("Select items to delete first.")
             else: 
                 st.info("Repository empty.")
 
