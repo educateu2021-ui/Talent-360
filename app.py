@@ -282,6 +282,14 @@ def delete_training(tid):
     conn.commit()
     conn.close()
 
+def delete_all_trainings():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM training_repo")
+    c.execute("DELETE FROM training_progress")
+    conn.commit()
+    conn.close()
+
 def get_trainings(user_name=None):
     conn = sqlite3.connect(DB_FILE)
     repo = pd.read_sql_query("SELECT * FROM training_repo", conn)
@@ -731,8 +739,8 @@ def app_training():
                 )
                 
                 # Action Buttons
-                col_save, _ = st.columns([1, 4])
-                with col_save:
+                col_del_sel, col_del_all = st.columns([1, 1])
+                with col_del_sel:
                     if st.button("🗑️ Delete Selected", type="primary"):
                         to_delete = edited_df[edited_df['Select'] == True]
                         if not to_delete.empty:
@@ -742,6 +750,10 @@ def app_training():
                             st.rerun()
                         else:
                             st.warning("Select items to delete first.")
+                with col_del_all:
+                    if st.button("⚠️ DELETE ALL", type="primary"):
+                        delete_all_trainings()
+                        st.rerun()
             else: 
                 st.info("Repository empty.")
 
