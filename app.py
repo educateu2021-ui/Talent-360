@@ -689,7 +689,7 @@ def main():
         if app == 'HOME': app_home()
         elif app == 'KPI': app_kpi()
         elif app == 'TRAINING': app_training()
-        elif app == 'Onboarding': app_onboarding()
+        elif app == 'ONBOARDING': app_onboarding()
 
 if __name__ == "__main__":
     main()
