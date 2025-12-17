@@ -275,6 +275,21 @@ def add_training(title, desc, link, role, mandatory, creator):
               (tid, title, desc, link, role, 1 if mandatory else 0, creator))
     conn.commit(); conn.close()
 
+def delete_training(tid):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM training_repo WHERE id=?", (tid,))
+    conn.commit()
+    conn.close()
+
+def delete_all_trainings():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM training_repo")
+    c.execute("DELETE FROM training_progress")
+    conn.commit()
+    conn.close()
+
 def get_trainings(user_name=None):
     conn = sqlite3.connect(DB_FILE)
     repo = pd.read_sql_query("SELECT * FROM training_repo", conn)
@@ -293,7 +308,6 @@ def update_training_status(user_name, training_id, status):
               (user_name, training_id, status, str(date.today())))
     conn.commit(); conn.close()
 
-# --- FIXED: ADDED TRAINING IMPORT HELPER ---
 def import_training_csv(file):
     try:
         df = pd.read_csv(file)
@@ -301,7 +315,6 @@ def import_training_csv(file):
         c = conn.cursor()
         for _, row in df.iterrows():
             tid = str(uuid.uuid4())[:8]
-            # Assumes CSV has columns: title, description, link, role_target, mandatory
             c.execute("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)",
                       (tid, row.get('title','No Title'), row.get('description',''), 
                        row.get('link','#'), row.get('role_target','All'), 
@@ -309,8 +322,7 @@ def import_training_csv(file):
         conn.commit()
         conn.close()
         return True
-    except Exception as e:
-        return False
+    except: return False
 
 # --- RESOURCE TRACKER HELPERS ---
 def get_resource_list():
@@ -338,6 +350,25 @@ def save_resource_entry(data, res_id=None):
         c.execute(f"INSERT INTO resource_tracker_v4 VALUES ({placeholders})", (new_id, *vals))
     conn.commit(); conn.close()
 
+def import_resource_csv(file):
+    try:
+        df = pd.read_csv(file)
+        cols = ['employee_name', 'employee_id', 'dev_code', 'department', 'location', 
+                'reporting_manager', 'onboarding_date', 'experience_level', 'status', 
+                'po_details', 'remarks', 'effective_exit_date', 'backfill_status', 
+                'reason_for_leaving', 'hourly_rate', 'hardware_daily_cost']
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        for _, row in df.iterrows():
+            new_id = str(uuid.uuid4())[:8]
+            vals = [str(row.get(k, '')) for k in cols]
+            placeholders = ",".join(["?"] * (len(cols) + 1))
+            c.execute(f"INSERT INTO resource_tracker_v4 VALUES ({placeholders})", (new_id, *vals))
+        conn.commit()
+        conn.close()
+        return True
+    except: return False
+
 # --- PLOTLY HELPERS ---
 def get_analytics_chart(df):
     if df.empty: return go.Figure()
@@ -358,7 +389,7 @@ def get_donut(df):
                       annotations=[dict(text=f"FTR {pct}%", x=0.5, y=0.5, showarrow=False, font=dict(size=16))])
     return fig
 
-# ---------- AUTH (UPDATED) ----------
+# ---------- AUTH ----------
 def login_page():
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1, 1])
@@ -391,11 +422,8 @@ def app_home():
     st.caption(f"ID: {st.session_state.get('emp_id')} | Role: {st.session_state.get('role')}")
     st.write("---")
     
-    # DYNAMIC COLUMNS BASED ON ROLE
     if st.session_state['role'] == 'Super Admin':
         c_adm, c1, c2, c3 = st.columns(4)
-        
-        # 👑 SUPER ADMIN CARD (ONLY VISIBLE TO SUPER ADMIN)
         with c_adm:
             with st.container(border=True):
                 st.markdown("### 🛡️ **User Admin**")
@@ -417,7 +445,6 @@ def app_home():
     with c3:
         with st.container(border=True):
             st.markdown("### 🚀 **Tracker**"); st.caption("HR & Finance")
-            # Only Team Lead and Super Admin can see Resource Tracker
             if st.session_state['role'] in ['Team Leader', 'Super Admin']:
                 if st.button("Launch Tracker", use_container_width=True): st.session_state['current_app']='RESOURCE'; st.rerun()
             else:
@@ -428,7 +455,7 @@ def parse_date(d):
     try: return pd.to_datetime(d).date()
     except: return None
 
-# --- ADMIN APP (NEW) ---
+# --- ADMIN APP ---
 def app_admin():
     c1, c2 = st.columns([1, 6])
     with c1:
@@ -436,7 +463,6 @@ def app_admin():
     with c2: st.markdown("### 🛡️ Super Admin Control Panel")
     st.markdown("---")
 
-    # State for Edit
     if 'admin_mode' not in st.session_state: st.session_state['admin_mode'] = 'TABLE'
     if 'admin_edit_user' not in st.session_state: st.session_state['admin_edit_user'] = None
 
@@ -444,7 +470,6 @@ def app_admin():
 
     with t1:
         if st.session_state['admin_mode'] == 'TABLE':
-            # --- TABLE VIEW ---
             col_act, col_add = st.columns([5, 1])
             with col_act: st.info("Manage portal access, reset passwords, and assign roles.")
             with col_add: 
@@ -454,15 +479,10 @@ def app_admin():
                     st.rerun()
             
             df = get_all_users()
-            # Hide password in table for security
             display_df = df.drop(columns=['password'])
-            
-            # Interactive Editor
             edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="user_editor")
             
             st.caption("Select a user from the dropdown below to Edit fully or Reset Password.")
-            
-            # Action Row
             ac1, ac2, ac3 = st.columns([2, 1, 1])
             with ac1:
                 sel_user = st.selectbox("Select User to Modify", df['username'], label_visibility="collapsed")
@@ -479,9 +499,7 @@ def app_admin():
                         st.success(f"User {sel_user} deleted."); st.rerun()
 
         elif st.session_state['admin_mode'] == 'FORM':
-            # --- FORM VIEW (Resource Tracker Style) ---
             st.subheader("User Account Details")
-            
             is_edit = st.session_state['admin_edit_user'] is not None
             u_data = {}
             if is_edit:
@@ -497,15 +515,12 @@ def app_admin():
                                         index=["Team Member", "Team Leader", "Super Admin"].index(u_data.get('role','Team Member')))
                 with f2:
                     emp_id = st.text_input("Employee ID Link", value=u_data.get('emp_id',''))
-                    
-                    # Password Handling
                     if not is_edit:
                         temp_pass = generate_temp_password()
                         password = st.text_input("Password (Auto-Generated Temp)", value=temp_pass)
                         st.info(f"📝 Note this temporary password: **{password}**")
                     else:
                         password = st.text_input("Reset Password (Leave as is to keep current)", value=u_data.get('password',''))
-                    
                     img = st.text_input("Profile Image URL", value=u_data.get('img','https://cdn-icons-png.flaticon.com/512/3135/3135715.png'))
 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -518,10 +533,7 @@ def app_admin():
                         if not username or not password:
                             st.error("Username and Password are required.")
                         else:
-                            payload = {
-                                'username': username, 'password': password, 'role': role,
-                                'name': name, 'emp_id': emp_id, 'img': img
-                            }
+                            payload = {'username': username, 'password': password, 'role': role, 'name': name, 'emp_id': emp_id, 'img': img}
                             save_user_entry(payload, is_update=is_edit)
                             st.success("User saved successfully!")
                             st.session_state['admin_mode'] = 'TABLE'
@@ -536,9 +548,7 @@ def app_admin():
                 if import_users_csv(up_users): st.success("Users Imported!"); st.rerun()
         with c_exp:
             df_exp = get_all_users()
-            st.download_button("Download User Database (CSV)", 
-                               data=df_exp.to_csv(index=False).encode('utf-8'), 
-                               file_name="portal_users.csv", mime="text/csv", use_container_width=True)
+            st.download_button("Download User Database (CSV)", data=df_exp.to_csv(index=False).encode('utf-8'), file_name="portal_users.csv", mime="text/csv", use_container_width=True)
 
 # --- FULL KPI APP ---
 def app_kpi():
@@ -548,13 +558,10 @@ def app_kpi():
     with c2: st.markdown("### 📊 KPI Management System")
     st.markdown("---")
     
-    # PERMISSION CHECK
     is_lead = st.session_state['role'] in ["Team Leader", "Super Admin"]
     
     if is_lead:
         df = get_kpi_data()
-        
-        # 1. Editor
         if 'edit_kpi_id' not in st.session_state: st.session_state['edit_kpi_id'] = None
         if st.session_state['edit_kpi_id']:
             with st.container(border=True):
@@ -567,7 +574,6 @@ def app_kpi():
 
                 with st.form("kpi_editor_form"):
                     c1, c2, c3 = st.columns(3)
-                    # Fetch real users for dropdown
                     u_df = get_all_users()
                     pilots = u_df[u_df['role'] == "Team Member"]['name'].tolist()
                     if not pilots: pilots = ["Generic Pilot"]
@@ -615,7 +621,6 @@ def app_kpi():
                     st.session_state['edit_kpi_id'] = None; st.rerun()
             st.markdown("---")
 
-        # 2. Dashboard
         if not st.session_state['edit_kpi_id']:
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Tasks", len(df))
@@ -651,7 +656,6 @@ def app_kpi():
                         with c_meta:
                             st.caption(f"👤 {row.get('name_activity_pilot','-')}")
                             st.caption(f"📅 Due: {row.get('commitment_date_to_customer','-')}")
-                            # Status Badge
                             st_color = "black"
                             if row['status'] == "Completed": st_color = "#10b981"
                             elif row['status'] == "Cancelled": st_color = "#ef4444"
@@ -663,7 +667,6 @@ def app_kpi():
                                 st.session_state['edit_kpi_id'] = row['id']; st.rerun()
             else: st.info("No tasks found.")
 
-    # MEMBER VIEW
     else:
         df = get_kpi_data()
         my_tasks = df[df['name_activity_pilot'] == st.session_state['name']]
@@ -693,14 +696,14 @@ def app_training():
     with c2: st.markdown("### 🎓 Training Hub")
     st.markdown("---")
     
-    # PERMISSION: Lead or Admin
     if st.session_state['role'] in ["Team Leader", "Super Admin"]:
         t1, t2 = st.tabs(["Repository", "Add New"])
         with t1:
             df = get_trainings()
+            
+            # ALWAYS SHOW IMPORT/EXPORT
             with st.expander("📂 Import / Export", expanded=True):
                 col_imp, col_exp = st.columns(2)
-                # FIXED: Added File Uploader
                 with col_imp:
                     up_train = st.file_uploader("Upload CSV", type=['csv'], key="train_csv_up")
                     if up_train:
@@ -709,8 +712,51 @@ def app_training():
                     if not df.empty:
                         csv = df.to_csv(index=False).encode('utf-8')
                         st.download_button("Download CSV", data=csv, file_name="training_repo.csv", mime="text/csv", use_container_width=True)
-            if not df.empty: st.dataframe(df, use_container_width=True)
-            else: st.info("Repository empty.")
+                    else:
+                        tpl = pd.DataFrame(columns=['title', 'description', 'link', 'role_target', 'mandatory'])
+                        csv = tpl.to_csv(index=False).encode('utf-8')
+                        st.download_button("Download Template CSV", data=csv, file_name="training_template.csv", mime="text/csv", use_container_width=True)
+
+            # DATA EDITOR WITH DELETE
+            if not df.empty:
+                st.markdown("#### Manage Modules")
+                
+                # Add selection column for deletion
+                df_editor = df.copy()
+                df_editor.insert(0, "Select", False)
+                
+                # Configure columns
+                edited_df = st.data_editor(
+                    df_editor,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Select": st.column_config.CheckboxColumn("Select", help="Select to delete"),
+                        "id": st.column_config.TextColumn("ID", disabled=True),
+                        "link": st.column_config.LinkColumn("Link"),
+                        "created_by": st.column_config.TextColumn("Creator", disabled=True)
+                    }
+                )
+                
+                # Action Buttons
+                col_del_sel, col_del_all = st.columns([1, 1])
+                with col_del_sel:
+                    if st.button("🗑️ Delete Selected", type="primary"):
+                        to_delete = edited_df[edited_df['Select'] == True]
+                        if not to_delete.empty:
+                            for _, row in to_delete.iterrows():
+                                delete_training(row['id'])
+                            st.success(f"Deleted {len(to_delete)} modules.")
+                            st.rerun()
+                        else:
+                            st.warning("Select items to delete first.")
+                with col_del_all:
+                    if st.button("⚠️ DELETE ALL", type="primary"):
+                        delete_all_trainings()
+                        st.rerun()
+            else: 
+                st.info("Repository empty.")
+
         with t2:
             with st.form("add_training_form"):
                 tt = st.text_input("Title")
@@ -751,19 +797,30 @@ def app_resource():
     with c2: st.markdown("### 🚀 Resource Tracker")
     st.markdown("---")
 
-    # 🛑 ACCESS RESTRICTION: TEAM LEADERS & SUPER ADMIN ONLY 🛑
     if st.session_state['role'] not in ["Team Leader", "Super Admin"]:
         st.error("🚫 ACCESS RESTRICTED")
         return
 
-    # --- STATE MANAGEMENT ---
     if 'res_edit_id' not in st.session_state: st.session_state['res_edit_id'] = None
     if 'res_view_mode' not in st.session_state: st.session_state['res_view_mode'] = 'LIST' 
 
-    # --- LIST VIEW WITH FILTERS ---
     if st.session_state['res_view_mode'] == 'LIST':
         
-        # 1. SEARCH & FILTERS SECTION
+        # ALWAYS SHOW IMPORT/EXPORT
+        with st.expander("📂 Import / Export", expanded=False):
+            rc1, rc2 = st.columns(2)
+            with rc1:
+                up_res = st.file_uploader("Import Resource CSV", type=['csv'], key="res_csv_up")
+                if up_res:
+                    if import_resource_csv(up_res): st.success("Resources Imported!"); st.rerun()
+            with rc2:
+                df_all = get_resource_list()
+                if not df_all.empty:
+                    csv_res = df_all.to_csv(index=False).encode('utf-8')
+                    st.download_button("Download Data CSV", data=csv_res, file_name="resources.csv", mime="text/csv", use_container_width=True)
+                else:
+                    st.info("No data to export.")
+
         with st.expander("🔎 Search & Filters", expanded=False):
             fc1, fc2, fc3 = st.columns(3)
             with fc1:
@@ -773,7 +830,6 @@ def app_resource():
             with fc3:
                 stat_filter = st.multiselect("Filter Status", ["Active", "Inactive", "Yet to start"])
 
-        # 2. DATA TABLE & ACTIONS
         col_act, col_add = st.columns([5, 1])
         with col_act:
             st.markdown("#### Resource List")
@@ -793,7 +849,6 @@ def app_resource():
             if stat_filter:
                 df = df[df['status'].isin(stat_filter)]
             
-            # Derived Costs
             df['hourly_rate'] = pd.to_numeric(df['hourly_rate'], errors='coerce').fillna(0)
             df['hardware_daily_cost'] = pd.to_numeric(df['hardware_daily_cost'], errors='coerce').fillna(0)
             df['Daily_Labor_Cost_$'] = df['hourly_rate'] * 8
@@ -817,7 +872,6 @@ def app_resource():
         else:
             st.info("No resources found in database.")
 
-    # --- FORM VIEW (ADD/EDIT) ---
     elif st.session_state['res_view_mode'] == 'FORM':
         res_id = st.session_state['res_edit_id']
         is_edit = res_id is not None
