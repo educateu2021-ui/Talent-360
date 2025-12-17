@@ -100,11 +100,12 @@ def seed_data(c):
                 actual = str(actual_dt)
                 otd = "OK" if actual_dt <= due else "NOT OK"
 
+            # FIXED: Added the missing column (start_date) to match the 21 columns in the table
             c.execute("INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (str(uuid.uuid4())[:8], pilot, f"Project Task {i:02d}", str(start), actual, str(due),
                        status, "Yes", f"REF-{1000+i}", "Yes", otd, 
                        f"Description for task {i}", "Standard", 
-                       "Yes", str(start), otd, "None", "QA-Ref", "Lead-X", "Mgr-Y"))
+                       "Yes", str(start), str(start), otd, "None", "QA-Ref", "Lead-X", "Mgr-Y"))
 
     # 3. SEED TRAINING (20 Modules)
     c.execute("SELECT count(*) FROM training_repo")
@@ -140,7 +141,7 @@ def init_db():
         username TEXT PRIMARY KEY, password TEXT, role TEXT, name TEXT, 
         emp_id TEXT, img TEXT, created_at TEXT)''')
 
-    # 2. KPI Table
+    # 2. KPI Table (21 Columns)
     c.execute('''CREATE TABLE IF NOT EXISTS tasks_v2 (
         id TEXT PRIMARY KEY, name_activity_pilot TEXT, task_name TEXT, date_of_receipt TEXT,
         actual_delivery_date TEXT, commitment_date_to_customer TEXT, status TEXT,
