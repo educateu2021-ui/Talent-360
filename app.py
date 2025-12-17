@@ -69,8 +69,8 @@ def seed_data(c):
     # --- 1. GUARANTEE FIXED USERS EXIST ---
     # (Username, Password, Role, Name, EmpID)
     mandatory_users = [
-        ("admin", "ad123", "Super Admin", "System Admin", "ADM-000"),
-        ("leader", "l123", "Team Leader", "Sarah Jenkins", "LDR-001"),
+        ("admin", "admin123", "Super Admin", "System Admin", "ADM-000"),
+        ("leader", "123", "Team Leader", "Sarah Jenkins", "LDR-001"),
         ("member", "123", "Team Member", "David Chen", "EMP-101")
     ]
 
@@ -410,11 +410,6 @@ def get_donut(df):
     return fig
 
 # ---------- AUTH ----------
-USERS = {
-    "leader": {"password": "123", "role": "Team Leader", "name": "Sarah Jenkins", "emp_id": "LDR-001", "tid": "TID-999", "img": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200&h=200"},
-    "member1": {"password": "123", "role": "Team Member", "name": "David Chen", "emp_id": "EMP-101", "tid": "TID-101", "img": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200&h=200"},
-    "member2": {"password": "123", "role": "Team Member", "name": "Emily Davis", "emp_id": "EMP-102", "tid": "TID-102", "img": "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=200&h=200"}
-}
 def login_page():
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1, 1])
