@@ -58,34 +58,47 @@ st.markdown(
 )
 
 # ---------- DATABASE & SEEDING ----------
-# UPDATED FILENAME TO FORCE NEW DB CREATION (Solves the Column Mismatch Error)
-DB_FILE = "portal_data_final_v18_clean.db"
+# UPDATED FILENAME TO FORCE NEW DB CREATION WITH FIXED CREDENTIALS
+DB_FILE = "portal_data_final_v19_auth_fixed.db"
 
 def seed_data(c):
-    """Generates 20 items of demo data for all modules if tables are empty."""
+    """Generates demo data and ensures specific login credentials exist."""
     
-    # 1. SEED USERS (20 Users)
+    # 1. SEED USERS
     c.execute("SELECT count(*) FROM users")
     if c.fetchone()[0] == 0:
-        # Fixed Admin
+        # --- FIXED CREDENTIALS ---
+        # 1. Super Admin
         c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
                   ("admin", "admin123", "Super Admin", "System Admin", "ADM-000", "https://cdn-icons-png.flaticon.com/512/3135/3135715.png", str(date.today())))
         
-        roles = ["Team Leader"] * 4 + ["Team Member"] * 16
-        first_names = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Elizabeth", "David", "Barbara", "Richard", "Susan", "Joseph", "Jessica", "Thomas", "Sarah", "Charles", "Karen"]
+        # 2. Standard Team Leader (Fixed Login)
+        c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
+                  ("leader", "123", "Team Leader", "Sarah Jenkins", "LDR-001", "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200", str(date.today())))
+
+        # 3. Standard Team Member (Fixed Login)
+        c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
+                  ("member", "123", "Team Member", "David Chen", "EMP-101", "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200", str(date.today())))
+
+        # --- GENERATED EXTRA USERS (For variety) ---
+        roles = ["Team Leader"] * 3 + ["Team Member"] * 15
+        first_names = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Elizabeth", "Barbara", "Richard", "Susan", "Joseph", "Jessica", "Thomas", "Charles", "Karen"]
         
         for i, name in enumerate(first_names):
             username = name.lower()
             role = roles[i]
-            c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
-                      (username, "123", role, f"{name} Smith", f"EMP-{100+i}", f"https://ui-avatars.com/api/?name={name}+Smith&background=random", str(date.today())))
+            # Avoid conflict if name matches fixed users
+            if username not in ['admin', 'leader', 'member']:
+                c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
+                          (username, "123", role, f"{name} Smith", f"EMP-{200+i}", f"https://ui-avatars.com/api/?name={name}+Smith&background=random", str(date.today())))
 
     # 2. SEED KPI TASKS (20 Tasks)
     c.execute("SELECT count(*) FROM tasks_v2")
     if c.fetchone()[0] == 0:
+        # Get all team members including our fixed "member"
         c.execute("SELECT name FROM users WHERE role='Team Member'")
         pilots = [row[0] for row in c.fetchall()]
-        if not pilots: pilots = ["Demo User"]
+        if not pilots: pilots = ["David Chen"]
 
         for i in range(1, 21):
             pilot = random.choice(pilots)
@@ -101,7 +114,7 @@ def seed_data(c):
                 actual = str(actual_dt)
                 otd = "OK" if actual_dt <= due else "NOT OK"
 
-            # INSERTING 21 VALUES TO MATCH 21 COLUMNS
+            # INSERTING 21 VALUES
             c.execute("INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (str(uuid.uuid4())[:8], pilot, f"Project Task {i:02d}", str(start), actual, str(due),
                        status, "Yes", f"REF-{1000+i}", "Yes", otd, 
