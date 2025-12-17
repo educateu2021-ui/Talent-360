@@ -79,32 +79,7 @@ def seed_data(c):
             c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
                       (username, "123", role, f"{name} Smith", f"EMP-{100+i}", f"https://ui-avatars.com/api/?name={name}+Smith&background=random", str(date.today())))
 
-    # 2. SEED KPI TASKS (20 Tasks)
-    c.execute("SELECT count(*) FROM tasks_v2")
-    if c.fetchone()[0] == 0:
-        c.execute("SELECT name FROM users WHERE role='Team Member'")
-        pilots = [row[0] for row in c.fetchall()]
-        if not pilots: pilots = ["Demo User"]
-
-        for i in range(1, 21):
-            pilot = random.choice(pilots)
-            status = random.choice(["Completed", "Inprogress", "Hold", "Cancelled"])
-            start = date.today() - timedelta(days=random.randint(10, 60))
-            due = start + timedelta(days=random.randint(5, 20))
-            
-            actual = ""
-            otd = "N/A"
-            if status == "Completed":
-                delay = random.choice([-2, -1, 0, 1, 5])
-                actual_dt = due + timedelta(days=delay)
-                actual = str(actual_dt)
-                otd = "OK" if actual_dt <= due else "NOT OK"
-
-            c.execute("INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                      (str(uuid.uuid4())[:8], pilot, f"Project Task {i:02d}", str(start), actual, str(due),
-                       status, "Yes", f"REF-{1000+i}", "Yes", otd, 
-                       f"Description for task {i}", "Standard", 
-                       "Yes", str(start), otd, "None", "QA-Ref", "Lead-X", "Mgr-Y"))
+   
 
     # 3. SEED TRAINING (20 Modules)
     c.execute("SELECT count(*) FROM training_repo")
