@@ -69,8 +69,8 @@ def seed_data(c):
     # --- 1. GUARANTEE FIXED USERS EXIST ---
     # (Username, Password, Role, Name, EmpID)
     mandatory_users = [
-        ("admin", "admin123", "Super Admin", "System Admin", "ADM-000"),
-        ("leader", "123", "Team Leader", "Sarah Jenkins", "LDR-001"),
+        ("admin", "ad123", "Super Admin", "System Admin", "ADM-000"),
+        ("leader", "l123", "Team Leader", "Sarah Jenkins", "LDR-001"),
         ("member", "123", "Team Member", "David Chen", "EMP-101")
     ]
 
