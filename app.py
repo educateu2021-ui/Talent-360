@@ -58,44 +58,39 @@ st.markdown(
 )
 
 # ---------- DATABASE & SEEDING ----------
-# UPDATED FILENAME TO FORCE NEW DB CREATION WITH FIXED CREDENTIALS
-DB_FILE = "portal_data_final_v19_auth_fixed.db"
+# v20: Fixed Auth and Resource-to-User creation
+DB_FILE = "portal_data_final_v20_fixed.db"
 
 def seed_data(c):
-    """Generates demo data and ensures specific login credentials exist."""
+    """Generates demo data and GUARANTEES specific login credentials."""
     
-    # 1. SEED USERS
+    # 1. SEED USERS - Force Insert Fixed Accounts
+    # We use INSERT OR IGNORE to ensure they exist without creating duplicates on re-runs
+    fixed_users = [
+        ("admin", "admin123", "Super Admin", "System Admin", "ADM-000"),
+        ("leader", "123", "Team Leader", "Sarah Jenkins", "LDR-001"),
+        ("member", "123", "Team Member", "David Chen", "EMP-101")
+    ]
+    
+    for u_user, u_pass, u_role, u_name, u_id in fixed_users:
+        img = f"https://ui-avatars.com/api/?name={u_name.replace(' ','+')}&background=random"
+        c.execute("INSERT OR IGNORE INTO users (username, password, role, name, emp_id, img, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                  (u_user, u_pass, u_role, u_name, u_id, img, str(date.today())))
+
+    # Fill up with random users if table is small
     c.execute("SELECT count(*) FROM users")
-    if c.fetchone()[0] == 0:
-        # --- FIXED CREDENTIALS ---
-        # 1. Super Admin
-        c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
-                  ("admin", "admin123", "Super Admin", "System Admin", "ADM-000", "https://cdn-icons-png.flaticon.com/512/3135/3135715.png", str(date.today())))
-        
-        # 2. Standard Team Leader (Fixed Login)
-        c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
-                  ("leader", "123", "Team Leader", "Sarah Jenkins", "LDR-001", "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200", str(date.today())))
-
-        # 3. Standard Team Member (Fixed Login)
-        c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
-                  ("member", "123", "Team Member", "David Chen", "EMP-101", "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200", str(date.today())))
-
-        # --- GENERATED EXTRA USERS (For variety) ---
-        roles = ["Team Leader"] * 3 + ["Team Member"] * 15
-        first_names = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Elizabeth", "Barbara", "Richard", "Susan", "Joseph", "Jessica", "Thomas", "Charles", "Karen"]
-        
+    if c.fetchone()[0] < 10:
+        roles = ["Team Leader"] * 2 + ["Team Member"] * 10
+        first_names = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Elizabeth"]
         for i, name in enumerate(first_names):
             username = name.lower()
-            role = roles[i]
-            # Avoid conflict if name matches fixed users
-            if username not in ['admin', 'leader', 'member']:
-                c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
-                          (username, "123", role, f"{name} Smith", f"EMP-{200+i}", f"https://ui-avatars.com/api/?name={name}+Smith&background=random", str(date.today())))
+            if username not in ["admin", "leader", "member"]:
+                c.execute("INSERT OR IGNORE INTO users VALUES (?,?,?,?,?,?,?)", 
+                          (username, "123", roles[i], f"{name} Doe", f"EMP-{200+i}", f"https://ui-avatars.com/api/?name={name}&background=random", str(date.today())))
 
     # 2. SEED KPI TASKS (20 Tasks)
     c.execute("SELECT count(*) FROM tasks_v2")
     if c.fetchone()[0] == 0:
-        # Get all team members including our fixed "member"
         c.execute("SELECT name FROM users WHERE role='Team Member'")
         pilots = [row[0] for row in c.fetchall()]
         if not pilots: pilots = ["David Chen"]
@@ -114,35 +109,33 @@ def seed_data(c):
                 actual = str(actual_dt)
                 otd = "OK" if actual_dt <= due else "NOT OK"
 
-            # INSERTING 21 VALUES
             c.execute("INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (str(uuid.uuid4())[:8], pilot, f"Project Task {i:02d}", str(start), actual, str(due),
                        status, "Yes", f"REF-{1000+i}", "Yes", otd, 
                        f"Description for task {i}", "Standard", 
                        "Yes", str(start), str(start), otd, "None", "QA-Ref", "Lead-X", "Mgr-Y"))
 
-    # 3. SEED TRAINING (20 Modules)
+    # 3. SEED TRAINING
     c.execute("SELECT count(*) FROM training_repo")
     if c.fetchone()[0] == 0:
-        topics = ["Python Basics", "Safety Protocols", "Leadership", "Agile", "Communication", "Data Privacy", "Cyber Security", "Excel Advanced", "Power BI", "SQL Funda", "Time Mgmt", "Conflict Res", "Negotiation", "Cloud AWS", "DevOps", "React JS", "Streamlit", "Machine Learning", "HR Policy", "Finance 101"]
+        topics = ["Python Basics", "Safety Protocols", "Leadership", "Agile", "Communication", "Data Privacy", "Cyber Security", "Excel Advanced", "Power BI", "SQL Funda"]
         for t in topics:
             c.execute("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)",
                       (str(uuid.uuid4())[:8], t, f"Learn about {t}", "http://example.com", 
                        random.choice(["All", "Team Leader", "Team Member"]), random.choice([0, 1]), "System"))
 
-    # 4. SEED RESOURCES (20 Entries)
+    # 4. SEED RESOURCES
     c.execute("SELECT count(*) FROM resource_tracker_v4")
     if c.fetchone()[0] == 0:
         depts = ["Engineering", "Quality", "Manufacturing"]
         locs = ["Chennai", "Bangalore", "Pune"]
-        for i in range(20):
-            status = random.choice(["Active", "Active", "Inactive", "Yet to start"])
+        for i in range(10):
+            status = random.choice(["Active", "Active", "Inactive"])
             exit_date = str(date.today()) if status == "Inactive" else ""
             reason = "Resigned" if status == "Inactive" else ""
-            
             c.execute("INSERT INTO resource_tracker_v4 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", 
                       (str(uuid.uuid4())[:8], f"Resource {i}", f"RES-{i}", "001", 
-                       random.choice(depts), random.choice(locs), "Manager X", str(date.today()),
+                       random.choice(depts), random.choice(locs), "Sarah Jenkins", str(date.today()),
                        "MID", status, "PO-123", "", exit_date, "No", reason, 
                        str(random.randint(20, 50)), "5"))
 
@@ -155,7 +148,7 @@ def init_db():
         username TEXT PRIMARY KEY, password TEXT, role TEXT, name TEXT, 
         emp_id TEXT, img TEXT, created_at TEXT)''')
 
-    # 2. KPI Table (21 Columns)
+    # 2. KPI Table
     c.execute('''CREATE TABLE IF NOT EXISTS tasks_v2 (
         id TEXT PRIMARY KEY, name_activity_pilot TEXT, task_name TEXT, date_of_receipt TEXT,
         actual_delivery_date TEXT, commitment_date_to_customer TEXT, status TEXT,
@@ -180,15 +173,12 @@ def init_db():
         effective_exit_date TEXT, backfill_status TEXT, reason_for_leaving TEXT,
         hourly_rate TEXT, hardware_daily_cost TEXT)''')
     
-    # INJECT DATA
     seed_data(c)
-
     conn.commit()
     conn.close()
 
 # ---------- UTILS & HELPERS ----------
 
-# --- USER ADMIN HELPERS ---
 def generate_temp_password(length=8):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for i in range(length))
@@ -206,7 +196,7 @@ def save_user_entry(data, is_update=False):
         c.execute("UPDATE users SET password=?, role=?, name=?, emp_id=?, img=? WHERE username=?",
                   (data['password'], data['role'], data['name'], data['emp_id'], data['img'], data['username']))
     else:
-        c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)",
+        c.execute("INSERT OR REPLACE INTO users VALUES (?,?,?,?,?,?,?)",
                   (data['username'], data['password'], data['role'], data['name'], data['emp_id'], data['img'], str(date.today())))
     conn.commit()
     conn.close()
@@ -357,13 +347,34 @@ def save_resource_entry(data, res_id=None):
     vals = [str(data.get(k, '')) for k in cols]
     
     if res_id:
+        # Update existing resource
         set_clause = ", ".join([f"{col}=?" for col in cols])
         c.execute(f"UPDATE resource_tracker_v4 SET {set_clause} WHERE id=?", (*vals, res_id))
     else:
+        # Create new resource
         new_id = str(uuid.uuid4())[:8]
         placeholders = ",".join(["?"] * (len(cols) + 1))
         c.execute(f"INSERT INTO resource_tracker_v4 VALUES ({placeholders})", (new_id, *vals))
+        
+        # --- AUTO CREATE USER LOGIN ---
+        # When a resource is added, automatically create a login for them
+        emp_id = data.get('employee_id', 'unknown')
+        username = emp_id.lower().replace(" ", "")
+        temp_pass = generate_temp_password()
+        name = data.get('employee_name', 'New User')
+        role = "Team Member" # Default role
+        img = f"https://ui-avatars.com/api/?name={name.replace(' ','+')}&background=random"
+        
+        # Check if user already exists
+        c.execute("SELECT count(*) FROM users WHERE username=?", (username,))
+        if c.fetchone()[0] == 0:
+            c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
+                      (username, temp_pass, role, name, emp_id, img, str(date.today())))
+            # Return temp pass to show in UI
+            return temp_pass
+            
     conn.commit(); conn.close()
+    return None
 
 def import_resource_csv(file):
     try:
@@ -421,7 +432,6 @@ def login_page():
                 conn.close()
                 
                 if user_data:
-                    # user_data: 0=user, 1=pass, 2=role, 3=name, 4=emp_id, 5=img
                     st.session_state.update({
                         'logged_in': True, 'user': user_data[0], 'role': user_data[2], 
                         'name': user_data[3], 'emp_id': user_data[4],
@@ -716,7 +726,6 @@ def app_training():
         with t1:
             df = get_trainings()
             
-            # ALWAYS SHOW IMPORT/EXPORT
             with st.expander("📂 Import / Export", expanded=True):
                 col_imp, col_exp = st.columns(2)
                 with col_imp:
@@ -732,15 +741,11 @@ def app_training():
                         csv = tpl.to_csv(index=False).encode('utf-8')
                         st.download_button("Download Template CSV", data=csv, file_name="training_template.csv", mime="text/csv", use_container_width=True)
 
-            # DATA EDITOR WITH DELETE
             if not df.empty:
                 st.markdown("#### Manage Modules")
-                
-                # Add selection column for deletion
                 df_editor = df.copy()
                 df_editor.insert(0, "Select", False)
                 
-                # Configure columns
                 edited_df = st.data_editor(
                     df_editor,
                     use_container_width=True,
@@ -753,7 +758,6 @@ def app_training():
                     }
                 )
                 
-                # Action Buttons
                 col_del_sel, col_del_all = st.columns([1, 1])
                 with col_del_sel:
                     if st.button("🗑️ Delete Selected", type="primary"):
@@ -820,8 +824,6 @@ def app_resource():
     if 'res_view_mode' not in st.session_state: st.session_state['res_view_mode'] = 'LIST' 
 
     if st.session_state['res_view_mode'] == 'LIST':
-        
-        # ALWAYS SHOW IMPORT/EXPORT
         with st.expander("📂 Import / Export", expanded=False):
             rc1, rc2 = st.columns(2)
             with rc1:
@@ -892,7 +894,6 @@ def app_resource():
         is_edit = res_id is not None
         
         st.subheader("Edit Resource" if is_edit else "New Resource Onboarding")
-        
         d = {}
         if is_edit:
             df = get_resource_list()
@@ -901,7 +902,6 @@ def app_resource():
 
         with st.container(border=True):
             col1, col2 = st.columns(2)
-            
             with col1:
                 emp_name = st.text_input("Employee Name", value=d.get('employee_name', ''))
                 dev_opts = ["001", "002", "003", "005", "012", "016", "089"]
@@ -940,10 +940,7 @@ def app_resource():
                 st.metric("Total Daily Bill", f"${tot_daily:,.2f}")
 
             remarks = st.text_area("Remarks if any", value=d.get('remarks', ''))
-
-            exit_date = None
-            backfill = "No"
-            reason = ""
+            exit_date, backfill, reason = None, "No", ""
             
             if status == "Inactive":
                 st.markdown("---")
@@ -958,7 +955,6 @@ def app_resource():
                     reason = st.text_input("Reason for Leaving", value=d.get('reason_for_leaving', ''))
 
             st.markdown("<br>", unsafe_allow_html=True)
-            
             b1, b2 = st.columns([1, 1])
             with b1:
                 if st.button("Cancel", use_container_width=True):
@@ -980,14 +976,16 @@ def app_resource():
                             "effective_exit_date": str(exit_date) if exit_date else "",
                             "backfill_status": backfill if status == "Inactive" else "",
                             "reason_for_leaving": reason if status == "Inactive" else "",
-                            "hourly_rate": str(hr_rate),
-                            "hardware_daily_cost": str(hw_cost)
+                            "hourly_rate": str(hr_rate), "hardware_daily_cost": str(hw_cost)
                         }
-                        save_resource_entry(payload, res_id)
-                        st.success("Resource Saved Successfully!")
+                        temp_pass = save_resource_entry(payload, res_id)
+                        if temp_pass:
+                            st.success(f"✅ Resource Added! Login created: {emp_id_val.lower().replace(' ','')} | Pass: {temp_pass}")
+                        else:
+                            st.success("Resource Saved Successfully!")
                         st.session_state['res_view_mode'] = 'LIST'
                         st.session_state['res_edit_id'] = None
-                        st.rerun()
+                        # No st.rerun() here so user can see the temp password toast
 
 # ---------- MAIN CONTROLLER ----------
 def main():
