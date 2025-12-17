@@ -58,15 +58,14 @@ st.markdown(
 )
 
 # ---------- DATABASE & SEEDING ----------
-DB_FILE = "portal_v21_final.db"
+DB_FILE = "portal_v22_ultimate.db"
 
 def seed_data(c):
     """
-    1. Forces Admin, Leader, and Member accounts to exist.
-    2. Fills random data ONLY if tables are empty.
+    Uses INSERT OR REPLACE to FORCE specific accounts to exist with specific passwords.
     """
     
-    # --- 1. GUARANTEE FIXED USERS EXIST ---
+    # 1. FORCE CREATE FIXED USERS (This overwrites them if they exist to fix passwords)
     # (Username, Password, Role, Name, EmpID)
     mandatory_users = [
         ("admin", "admin123", "Super Admin", "System Admin", "ADM-000"),
@@ -75,14 +74,12 @@ def seed_data(c):
     ]
 
     for u_user, u_pass, u_role, u_name, u_id in mandatory_users:
-        # Check if user exists
-        c.execute("SELECT * FROM users WHERE username=?", (u_user,))
-        if not c.fetchone():
-            img = f"https://ui-avatars.com/api/?name={u_name.replace(' ','+')}&background=random"
-            c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
-                      (u_user, u_pass, u_role, u_name, u_id, img, str(date.today())))
+        img = f"https://ui-avatars.com/api/?name={u_name.replace(' ','+')}&background=random"
+        # REPLACE ensures password is reset to what we expect
+        c.execute("INSERT OR REPLACE INTO users (username, password, role, name, emp_id, img, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                  (u_user, u_pass, u_role, u_name, u_id, img, str(date.today())))
 
-    # --- 2. SEED RANDOM KPI TASKS (If Empty) ---
+    # 2. FILL RANDOM KPI TASKS (Only if table empty)
     c.execute("SELECT count(*) FROM tasks_v2")
     if c.fetchone()[0] == 0:
         c.execute("SELECT name FROM users WHERE role='Team Member'")
@@ -102,14 +99,13 @@ def seed_data(c):
                 actual = str(actual_dt)
                 otd = "OK" if actual_dt <= due else "NOT OK"
 
-            # 21 Columns
             c.execute("INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (str(uuid.uuid4())[:8], pilot, f"Project Task {i:02d}", str(start), actual, str(due),
                        status, "Yes", f"REF-{1000+i}", "Yes", otd, 
                        f"Description for task {i}", "Standard", 
                        "Yes", str(start), str(start), otd, "None", "QA-Ref", "Lead-X", "Mgr-Y"))
 
-    # --- 3. SEED TRAINING (If Empty) ---
+    # 3. FILL TRAINING (Only if empty)
     c.execute("SELECT count(*) FROM training_repo")
     if c.fetchone()[0] == 0:
         topics = ["Python Basics", "Safety Protocols", "Leadership 101", "Agile", "Communication", "Data Privacy", "Cyber Security", "Excel Advanced", "Power BI", "SQL Funda"]
@@ -118,7 +114,7 @@ def seed_data(c):
                       (str(uuid.uuid4())[:8], t, f"Learn about {t}", "http://example.com", 
                        random.choice(["All", "Team Leader", "Team Member"]), random.choice([0, 1]), "System"))
 
-    # --- 4. SEED RESOURCES (If Empty) ---
+    # 4. FILL RESOURCES (Only if empty)
     c.execute("SELECT count(*) FROM resource_tracker_v4")
     if c.fetchone()[0] == 0:
         depts = ["Engineering", "Quality", "Manufacturing"]
