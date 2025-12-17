@@ -58,37 +58,31 @@ st.markdown(
 )
 
 # ---------- DATABASE & SEEDING ----------
-# v20: Fixed Auth and Resource-to-User creation
-DB_FILE = "portal_data_final_v20_fixed.db"
+DB_FILE = "portal_v21_final.db"
 
 def seed_data(c):
-    """Generates demo data and GUARANTEES specific login credentials."""
+    """
+    1. Forces Admin, Leader, and Member accounts to exist.
+    2. Fills random data ONLY if tables are empty.
+    """
     
-    # 1. SEED USERS - Force Insert Fixed Accounts
-    # We use INSERT OR IGNORE to ensure they exist without creating duplicates on re-runs
-    fixed_users = [
+    # --- 1. GUARANTEE FIXED USERS EXIST ---
+    # (Username, Password, Role, Name, EmpID)
+    mandatory_users = [
         ("admin", "admin123", "Super Admin", "System Admin", "ADM-000"),
         ("leader", "123", "Team Leader", "Sarah Jenkins", "LDR-001"),
         ("member", "123", "Team Member", "David Chen", "EMP-101")
     ]
-    
-    for u_user, u_pass, u_role, u_name, u_id in fixed_users:
-        img = f"https://ui-avatars.com/api/?name={u_name.replace(' ','+')}&background=random"
-        c.execute("INSERT OR IGNORE INTO users (username, password, role, name, emp_id, img, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                  (u_user, u_pass, u_role, u_name, u_id, img, str(date.today())))
 
-    # Fill up with random users if table is small
-    c.execute("SELECT count(*) FROM users")
-    if c.fetchone()[0] < 10:
-        roles = ["Team Leader"] * 2 + ["Team Member"] * 10
-        first_names = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Elizabeth"]
-        for i, name in enumerate(first_names):
-            username = name.lower()
-            if username not in ["admin", "leader", "member"]:
-                c.execute("INSERT OR IGNORE INTO users VALUES (?,?,?,?,?,?,?)", 
-                          (username, "123", roles[i], f"{name} Doe", f"EMP-{200+i}", f"https://ui-avatars.com/api/?name={name}&background=random", str(date.today())))
+    for u_user, u_pass, u_role, u_name, u_id in mandatory_users:
+        # Check if user exists
+        c.execute("SELECT * FROM users WHERE username=?", (u_user,))
+        if not c.fetchone():
+            img = f"https://ui-avatars.com/api/?name={u_name.replace(' ','+')}&background=random"
+            c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
+                      (u_user, u_pass, u_role, u_name, u_id, img, str(date.today())))
 
-    # 2. SEED KPI TASKS (20 Tasks)
+    # --- 2. SEED RANDOM KPI TASKS (If Empty) ---
     c.execute("SELECT count(*) FROM tasks_v2")
     if c.fetchone()[0] == 0:
         c.execute("SELECT name FROM users WHERE role='Team Member'")
@@ -101,30 +95,30 @@ def seed_data(c):
             start = date.today() - timedelta(days=random.randint(10, 60))
             due = start + timedelta(days=random.randint(5, 20))
             
-            actual = ""
-            otd = "N/A"
+            actual, otd = "", "N/A"
             if status == "Completed":
                 delay = random.choice([-2, -1, 0, 1, 5])
                 actual_dt = due + timedelta(days=delay)
                 actual = str(actual_dt)
                 otd = "OK" if actual_dt <= due else "NOT OK"
 
+            # 21 Columns
             c.execute("INSERT INTO tasks_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (str(uuid.uuid4())[:8], pilot, f"Project Task {i:02d}", str(start), actual, str(due),
                        status, "Yes", f"REF-{1000+i}", "Yes", otd, 
                        f"Description for task {i}", "Standard", 
                        "Yes", str(start), str(start), otd, "None", "QA-Ref", "Lead-X", "Mgr-Y"))
 
-    # 3. SEED TRAINING
+    # --- 3. SEED TRAINING (If Empty) ---
     c.execute("SELECT count(*) FROM training_repo")
     if c.fetchone()[0] == 0:
-        topics = ["Python Basics", "Safety Protocols", "Leadership", "Agile", "Communication", "Data Privacy", "Cyber Security", "Excel Advanced", "Power BI", "SQL Funda"]
+        topics = ["Python Basics", "Safety Protocols", "Leadership 101", "Agile", "Communication", "Data Privacy", "Cyber Security", "Excel Advanced", "Power BI", "SQL Funda"]
         for t in topics:
             c.execute("INSERT INTO training_repo VALUES (?,?,?,?,?,?,?)",
                       (str(uuid.uuid4())[:8], t, f"Learn about {t}", "http://example.com", 
                        random.choice(["All", "Team Leader", "Team Member"]), random.choice([0, 1]), "System"))
 
-    # 4. SEED RESOURCES
+    # --- 4. SEED RESOURCES (If Empty) ---
     c.execute("SELECT count(*) FROM resource_tracker_v4")
     if c.fetchone()[0] == 0:
         depts = ["Engineering", "Quality", "Manufacturing"]
@@ -143,12 +137,11 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
-    # 1. USER TABLE
+    # Create Tables
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         username TEXT PRIMARY KEY, password TEXT, role TEXT, name TEXT, 
         emp_id TEXT, img TEXT, created_at TEXT)''')
 
-    # 2. KPI Table
     c.execute('''CREATE TABLE IF NOT EXISTS tasks_v2 (
         id TEXT PRIMARY KEY, name_activity_pilot TEXT, task_name TEXT, date_of_receipt TEXT,
         actual_delivery_date TEXT, commitment_date_to_customer TEXT, status TEXT,
@@ -157,15 +150,14 @@ def init_db():
         date_of_clarity_in_input TEXT, start_date TEXT, otd_customer TEXT, customer_remarks TEXT,
         name_quality_gate_referent TEXT, project_lead TEXT, customer_manager_name TEXT)''')
     
-    # 3. Training Tables
     c.execute('''CREATE TABLE IF NOT EXISTS training_repo (
         id TEXT PRIMARY KEY, title TEXT, description TEXT, link TEXT, 
         role_target TEXT, mandatory INTEGER, created_by TEXT)''')
+    
     c.execute('''CREATE TABLE IF NOT EXISTS training_progress (
         user_name TEXT, training_id TEXT, status TEXT, 
         last_updated TEXT, PRIMARY KEY (user_name, training_id))''')
     
-    # 4. RESOURCE TRACKER TABLE
     c.execute('''CREATE TABLE IF NOT EXISTS resource_tracker_v4 (
         id TEXT PRIMARY KEY, employee_name TEXT, employee_id TEXT, dev_code TEXT,
         department TEXT, location TEXT, reporting_manager TEXT, onboarding_date TEXT,
@@ -347,34 +339,36 @@ def save_resource_entry(data, res_id=None):
     vals = [str(data.get(k, '')) for k in cols]
     
     if res_id:
-        # Update existing resource
+        # Update existing
         set_clause = ", ".join([f"{col}=?" for col in cols])
         c.execute(f"UPDATE resource_tracker_v4 SET {set_clause} WHERE id=?", (*vals, res_id))
+        conn.commit(); conn.close()
+        return None
     else:
-        # Create new resource
+        # Create new
         new_id = str(uuid.uuid4())[:8]
         placeholders = ",".join(["?"] * (len(cols) + 1))
         c.execute(f"INSERT INTO resource_tracker_v4 VALUES ({placeholders})", (new_id, *vals))
         
         # --- AUTO CREATE USER LOGIN ---
-        # When a resource is added, automatically create a login for them
+        # Logic: username = empid_lowercase, password = auto-generated
         emp_id = data.get('employee_id', 'unknown')
         username = emp_id.lower().replace(" ", "")
         temp_pass = generate_temp_password()
         name = data.get('employee_name', 'New User')
-        role = "Team Member" # Default role
+        role = "Team Member" 
         img = f"https://ui-avatars.com/api/?name={name.replace(' ','+')}&background=random"
         
-        # Check if user already exists
+        # Insert user only if username doesn't exist
         c.execute("SELECT count(*) FROM users WHERE username=?", (username,))
         if c.fetchone()[0] == 0:
             c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)", 
                       (username, temp_pass, role, name, emp_id, img, str(date.today())))
-            # Return temp pass to show in UI
-            return temp_pass
-            
-    conn.commit(); conn.close()
-    return None
+            conn.commit(); conn.close()
+            return f"User: {username} | Pass: {temp_pass}"
+        
+        conn.commit(); conn.close()
+        return None
 
 def import_resource_csv(file):
     try:
