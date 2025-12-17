@@ -412,12 +412,17 @@ def login_page():
     with c2:
         with st.container(border=True):
             st.markdown("<h2 style='text-align:center; color:#1f2937;'>Portal Sign In</h2>", unsafe_allow_html=True)
-            u = st.text_input("Username")
-            p = st.text_input("Password", type="password")
+            
+            # Use lower() on input to normalize
+            u = st.text_input("Username").strip() 
+            p = st.text_input("Password", type="password").strip()
+            
             if st.button("Secure Login", use_container_width=True, type="primary"):
                 conn = sqlite3.connect(DB_FILE)
                 c = conn.cursor()
-                c.execute("SELECT * FROM users WHERE username=? AND password=?", (u, p))
+                
+                # UPDATED QUERY: Checks lowercase username matches lowercase input
+                c.execute("SELECT * FROM users WHERE LOWER(username)=? AND password=?", (u.lower(), p))
                 user_data = c.fetchone()
                 conn.close()
                 
@@ -430,7 +435,13 @@ def login_page():
                     st.rerun()
                 else:
                     st.error("Invalid credentials.")
-
+                    
+            # DEBUGGING HELPER (Optional: Remove before deployment)
+            with st.expander("Debug: View Valid Users"):
+                conn = sqlite3.connect(DB_FILE)
+                debug_df = pd.read_sql("SELECT username, role, password FROM users", conn)
+                st.dataframe(debug_df)
+                conn.close()
 # ---------- APP SECTIONS ----------
 def app_home():
     st.markdown(f"## Welcome, {st.session_state['name']}")
