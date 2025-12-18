@@ -58,15 +58,15 @@ st.markdown(
 )
 
 # ---------- DATABASE & SEEDING ----------
-DB_FILE = "portal_v22_ultimate.db"
+DB_FILE = "portal_v23_fixed.db"
 
 def seed_data(c):
     """
-    Uses INSERT OR REPLACE to FORCE specific accounts to exist with specific passwords.
+    CHANGED: Uses INSERT OR IGNORE so we don't overwrite passwords if a user 
+    has changed them. Only inserts if the user does NOT exist.
     """
     
-    # 1. FORCE CREATE FIXED USERS (This overwrites them if they exist to fix passwords)
-    # (Username, Password, Role, Name, EmpID)
+    # 1. CREATE FIXED USERS (Only if they don't exist)
     mandatory_users = [
         ("admin", "admin123", "Super Admin", "System Admin", "ADM-000"),
         ("leader", "123", "Team Leader", "Sarah Jenkins", "LDR-001"),
@@ -75,8 +75,8 @@ def seed_data(c):
 
     for u_user, u_pass, u_role, u_name, u_id in mandatory_users:
         img = f"https://ui-avatars.com/api/?name={u_name.replace(' ','+')}&background=random"
-        # REPLACE ensures password is reset to what we expect
-        c.execute("INSERT OR REPLACE INTO users (username, password, role, name, emp_id, img, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+        # INSERT OR IGNORE ensures we DO NOT reset the password if user exists
+        c.execute("INSERT OR IGNORE INTO users (username, password, role, name, emp_id, img, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", 
                   (u_user, u_pass, u_role, u_name, u_id, img, str(date.today())))
 
     # 2. FILL RANDOM KPI TASKS (Only if table empty)
@@ -208,6 +208,27 @@ def import_users_csv(file):
         conn.close()
         return True
     except: return False
+
+# --- NEW HELPERS FOR PROFILE ---
+def get_user_resource_details(emp_id):
+    """Fetches details from resource_tracker based on Employee ID (excluding costs)"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        df = pd.read_sql_query("SELECT * FROM resource_tracker_v4 WHERE employee_id=?", conn, params=(emp_id,))
+    except: 
+        df = pd.DataFrame()
+    conn.close()
+    return df
+
+def update_user_credentials(username, new_password=None, new_img=None):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    if new_password:
+        c.execute("UPDATE users SET password=? WHERE username=?", (new_password, username))
+    if new_img:
+        c.execute("UPDATE users SET img=? WHERE username=?", (new_img, username))
+    conn.commit()
+    conn.close()
 
 # --- KPI HELPERS ---
 def get_kpi_data():
@@ -481,6 +502,104 @@ def parse_date(d):
     try: return pd.to_datetime(d).date()
     except: return None
 
+# --- NEW APP SECTION: MY PROFILE ---
+def app_my_profile():
+    c1, c2 = st.columns([1, 6])
+    with c1:
+        if st.button("⬅ Home", use_container_width=True): st.session_state['current_app']='HOME'; st.rerun()
+    with c2: st.markdown("### 👤 My Profile & Settings")
+    st.markdown("---")
+
+    tab_det, tab_set = st.tabs(["📄 My Details", "⚙️ Account Settings"])
+
+    # 1. MY DETAILS TAB (Resource Info without costs)
+    with tab_det:
+        my_id = st.session_state.get('emp_id')
+        if not my_id:
+            st.warning("No Employee ID linked to your account. Contact Admin.")
+        else:
+            df = get_user_resource_details(my_id)
+            if not df.empty:
+                data = df.iloc[0]
+                
+                # Layout
+                c_prof, c_info = st.columns([1, 3])
+                with c_prof:
+                    st.image(st.session_state.get('img'), width=150)
+                    st.markdown(f"**{data['employee_name']}**")
+                    st.caption(f"{data['department']} | {data['location']}")
+                    if data['status'] == 'Active':
+                        st.success("Status: Active")
+                    else:
+                        st.error(f"Status: {data['status']}")
+
+                with c_info:
+                    with st.container(border=True):
+                        st.subheader("Official Details")
+                        # Exclude sensitive fields: hourly_rate, hardware_daily_cost, po_details
+                        ic1, ic2 = st.columns(2)
+                        with ic1:
+                            st.text_input("Employee ID", value=data['employee_id'], disabled=True)
+                            st.text_input("Reporting Manager", value=data['reporting_manager'], disabled=True)
+                            st.text_input("Experience Level", value=data['experience_level'], disabled=True)
+                        with ic2:
+                            st.text_input("DEV Code", value=data['dev_code'], disabled=True)
+                            st.text_input("Onboarding Date", value=data['onboarding_date'], disabled=True)
+                            st.text_input("Department", value=data['department'], disabled=True)
+                        
+                        st.markdown("**Remarks:**")
+                        st.info(data['remarks'] if data['remarks'] else "No remarks.")
+            else:
+                st.info(f"No resource record found for Employee ID: {my_id}. Please ask your lead to update the Resource Tracker.")
+
+    # 2. ACCOUNT SETTINGS TAB
+    with tab_set:
+        c_pass, c_photo = st.columns(2)
+        
+        with c_pass:
+            with st.container(border=True):
+                st.subheader("🔐 Change Password")
+                curr_pass = st.text_input("Current Password", type="password")
+                new_pass = st.text_input("New Password", type="password")
+                conf_pass = st.text_input("Confirm New Password", type="password")
+                
+                if st.button("Update Password", type="primary", use_container_width=True):
+                    # Verify current password
+                    conn = sqlite3.connect(DB_FILE)
+                    cur = conn.cursor()
+                    cur.execute("SELECT password FROM users WHERE username=?", (st.session_state['user'],))
+                    db_pass = cur.fetchone()[0]
+                    conn.close()
+                    
+                    if curr_pass != db_pass:
+                        st.error("Current password incorrect.")
+                    elif new_pass != conf_pass:
+                        st.error("New passwords do not match.")
+                    elif not new_pass:
+                        st.error("Password cannot be empty.")
+                    else:
+                        update_user_credentials(st.session_state['user'], new_password=new_pass)
+                        st.success("Password updated successfully! Please login again.")
+                        st.session_state['logged_in'] = False # Force re-login
+                        st.rerun()
+
+        with c_photo:
+            with st.container(border=True):
+                st.subheader("🖼️ Change Profile Photo")
+                st.write("Current URL:")
+                st.caption(st.session_state.get('img'))
+                new_img = st.text_input("New Image URL", placeholder="https://example.com/my-photo.png")
+                
+                if st.button("Update Photo", use_container_width=True):
+                    if new_img:
+                        update_user_credentials(st.session_state['user'], new_img=new_img)
+                        st.session_state['img'] = new_img # Update session immediately
+                        st.success("Profile photo updated!")
+                        st.rerun()
+                    else:
+                        st.error("Please enter a valid URL.")
+
+
 # --- ADMIN APP ---
 def app_admin():
     c1, c2 = st.columns([1, 6])
@@ -673,24 +792,27 @@ def app_kpi():
             
             st.markdown("#### Active Tasks")
             if not df.empty:
+                # --- NEW GRID LAYOUT ---
+                cols = st.columns(2)
                 for idx, row in df.iterrows():
-                    with st.container(border=True):
-                        c_main, c_meta, c_btn = st.columns([4, 2, 1])
-                        with c_main:
-                            st.markdown(f"**{row['task_name']}**")
-                            st.caption(row.get('description_of_activity',''))
-                        with c_meta:
-                            st.caption(f"👤 {row.get('name_activity_pilot','-')}")
-                            st.caption(f"📅 Due: {row.get('commitment_date_to_customer','-')}")
-                            st_color = "black"
-                            if row['status'] == "Completed": st_color = "#10b981"
-                            elif row['status'] == "Cancelled": st_color = "#ef4444"
-                            elif row['status'] == "Hold": st_color = "#f59e0b"
-                            else: st_color = "#3b82f6"
-                            st.markdown(f"<span style='color:{st_color}; font-weight:bold;'>{row['status']}</span> | OTD: {row.get('otd_customer','-')}", unsafe_allow_html=True)
-                        with c_btn:
-                            if st.button("Edit", key=f"kpi_edit_{row['id']}", use_container_width=True):
-                                st.session_state['edit_kpi_id'] = row['id']; st.rerun()
+                    with cols[idx % 2]: # Alternates between col 0 and 1
+                        with st.container(border=True):
+                            c_main, c_meta, c_btn = st.columns([4, 2, 1])
+                            with c_main:
+                                st.markdown(f"**{row['task_name']}**")
+                                st.caption(row.get('description_of_activity',''))
+                            with c_meta:
+                                st.caption(f"👤 {row.get('name_activity_pilot','-')}")
+                                st.caption(f"📅 Due: {row.get('commitment_date_to_customer','-')}")
+                                st_color = "black"
+                                if row['status'] == "Completed": st_color = "#10b981"
+                                elif row['status'] == "Cancelled": st_color = "#ef4444"
+                                elif row['status'] == "Hold": st_color = "#f59e0b"
+                                else: st_color = "#3b82f6"
+                                st.markdown(f"<span style='color:{st_color}; font-weight:bold;'>{row['status']}</span> | OTD: {row.get('otd_customer','-')}", unsafe_allow_html=True)
+                            with c_btn:
+                                if st.button("Edit", key=f"kpi_edit_{row['id']}", use_container_width=True):
+                                    st.session_state['edit_kpi_id'] = row['id']; st.rerun()
             else: st.info("No tasks found.")
 
     else:
@@ -698,21 +820,27 @@ def app_kpi():
         my_tasks = df[df['name_activity_pilot'] == st.session_state['name']]
         st.metric("My Pending Tasks", len(my_tasks[my_tasks['status']!='Completed']) if not my_tasks.empty else 0)
         if not my_tasks.empty:
+            # --- NEW GRID LAYOUT FOR MEMBER ---
+            cols = st.columns(2)
+            # Reset index to iterate properly for modulo
+            my_tasks = my_tasks.reset_index(drop=True)
+            
             for idx, row in my_tasks.iterrows():
-                with st.container(border=True):
-                    st.markdown(f"**{row['task_name']}**")
-                    st.write(f"Due: {row.get('commitment_date_to_customer','-')}")
-                    with st.form(key=f"my_task_{row['id']}"):
-                        c1, c2 = st.columns(2)
-                        curr_stat = row.get('status', 'Inprogress')
-                        idx_stat = ["Inprogress", "Completed", "Hold"].index(curr_stat) if curr_stat in ["Inprogress", "Completed", "Hold"] else 0
-                        ns = c1.selectbox("Status", ["Inprogress", "Completed", "Hold"], index=idx_stat)
-                        ad = c2.date_input("Actual Delivery", value=parse_date(row.get('actual_delivery_date')) or date.today())
-                        if st.form_submit_button("Update", type="primary"):
-                            conn = sqlite3.connect(DB_FILE)
-                            conn.execute("UPDATE tasks_v2 SET status=?, actual_delivery_date=? WHERE id=?", (ns, str(ad), row['id']))
-                            conn.commit(); conn.close()
-                            st.success("Updated!"); st.rerun()
+                with cols[idx % 2]:
+                    with st.container(border=True):
+                        st.markdown(f"**{row['task_name']}**")
+                        st.write(f"Due: {row.get('commitment_date_to_customer','-')}")
+                        with st.form(key=f"my_task_{row['id']}"):
+                            c1, c2 = st.columns(2)
+                            curr_stat = row.get('status', 'Inprogress')
+                            idx_stat = ["Inprogress", "Completed", "Hold"].index(curr_stat) if curr_stat in ["Inprogress", "Completed", "Hold"] else 0
+                            ns = c1.selectbox("Status", ["Inprogress", "Completed", "Hold"], index=idx_stat)
+                            ad = c2.date_input("Actual Delivery", value=parse_date(row.get('actual_delivery_date')) or date.today())
+                            if st.form_submit_button("Update", type="primary"):
+                                conn = sqlite3.connect(DB_FILE)
+                                conn.execute("UPDATE tasks_v2 SET status=?, actual_delivery_date=? WHERE id=?", (ns, str(ad), row['id']))
+                                conn.commit(); conn.close()
+                                st.success("Updated!"); st.rerun()
 
 # --- TRAINING APP ---
 def app_training():
@@ -794,20 +922,26 @@ def app_training():
         st.markdown("#### Modules")
         if df.empty: st.info("No training found.")
         else:
+            # --- NEW GRID LAYOUT FOR TRAINING ---
+            cols = st.columns(2)
+            # Reset index just in case
+            df = df.reset_index(drop=True)
+            
             for idx, row in df.iterrows():
-                with st.container(border=True):
-                    c1, c2 = st.columns([3, 1])
-                    with c1:
-                        st.markdown(f"**{row['title']}**")
-                        st.caption(row['description'])
-                        st.markdown(f"[{row['link']}]({row['link']})")
-                    with c2:
-                        c_stat = row['status']
-                        n_stat = st.selectbox("Status", ["Not Started", "In Progress", "Completed"], 
-                                              index=["Not Started", "In Progress", "Completed"].index(c_stat), 
-                                              key=f"tr_stat_{row['id']}", label_visibility="collapsed")
-                        if n_stat != c_stat:
-                            update_training_status(st.session_state['name'], row['id'], n_stat); st.rerun()
+                with cols[idx % 2]:
+                    with st.container(border=True):
+                        c1, c2 = st.columns([3, 1])
+                        with c1:
+                            st.markdown(f"**{row['title']}**")
+                            st.caption(row['description'])
+                            st.markdown(f"[{row['link']}]({row['link']})")
+                        with c2:
+                            c_stat = row['status']
+                            n_stat = st.selectbox("Status", ["Not Started", "In Progress", "Completed"], 
+                                                  index=["Not Started", "In Progress", "Completed"].index(c_stat), 
+                                                  key=f"tr_stat_{row['id']}", label_visibility="collapsed")
+                            if n_stat != c_stat:
+                                update_training_status(st.session_state['name'], row['id'], n_stat); st.rerun()
 
 # --- RESOURCE TRACKER APP ---
 def app_resource():
@@ -1001,6 +1135,12 @@ def main():
             if img_url: st.markdown(f"<img src='{img_url}' class='profile-img'>", unsafe_allow_html=True)
             st.markdown(f"<h3 style='text-align:center;'>{st.session_state.get('name','')}</h3>", unsafe_allow_html=True)
             st.markdown(f"<p style='text-align:center; color:gray;'>{st.session_state.get('role','')}</p>", unsafe_allow_html=True)
+            
+            # --- NEW SIDEBAR LINK ---
+            if st.button("👤 My Profile", use_container_width=True): 
+                st.session_state['current_app'] = 'MY_PROFILE'
+                st.rerun()
+            
             st.markdown("---")
             if st.button("Sign Out", use_container_width=True): st.session_state.clear(); st.rerun()
 
@@ -1013,6 +1153,7 @@ def main():
         elif app == 'TRAINING': app_training()
         elif app == 'RESOURCE': app_resource()
         elif app == 'ADMIN': app_admin()
+        elif app == 'MY_PROFILE': app_my_profile() # --- NEW ROUTE ---
 
 if __name__ == "__main__":
     main()
